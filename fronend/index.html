@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TPV para Restaurante</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vue.js 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Vue Router -->
+    <script src="https://unpkg.com/vue-router@4/dist/vue-router.global.js"></script>
+    <!-- Vue Demi (Dependencia para Pinia) -->
+    <script src="https://unpkg.com/vue-demi"></script>
+    <!-- Pinia -->
+    <script src="https://unpkg.com/pinia@2/dist/pinia.iife.js"></script>
+    <!-- Axios -->
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <!-- Socket.IO Client -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+        .bottom-nav-link.router-link-active { color: #10b981; /* emerald-500 */ }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div id="app">
+        <!-- El contenido se renderizará aquí por Vue Router -->
+    </div>
+
+    <script type="module">
+        const { createApp, ref, computed, onMounted, onBeforeUnmount, watch, nextTick } = Vue;
+        const { createRouter, createWebHashHistory } = VueRouter;
+        const { createPinia, defineStore } = Pinia;
+
+        // --- CONFIGURACIÓN DINÁMICA DE LA API ---
+        const backendHostname = window.location.hostname || 'localhost';
+        const backendUrl = `http://${backendHostname}:3000`;
+
+        // --- SERVICIO API (Axios) ---
+        const apiClient = axios.create({
+            baseURL: `${backendUrl}/api`,
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        // --- STORE DE AUTENTICACIÓN (Pinia) ---
+        const useAuthStore = defineStore('auth', () => {
+            const user = ref(null);
+            const token = ref(localStorage.getItem('token') || null);
+            const isLoginModalOpen = ref(false);
+
+            const isAuthenticated = computed(() => !!token.value);
+            
+            watch(token, (newToken) => {
+                if (newToken) {
+                    apiClient.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+                } else {
+                    delete apiClient.defaults.headers.common['Authorization'];
+                }
+            }, { immediate: true });
+
+            function openLoginModal() { isLoginModalOpen.value = true; }
+            function closeLoginModal() { isLoginModalOpen.value = false; }
+
+            async function login(credentials) {
+                const response = await apiClient.post('/auth/login', credentials);
+                const { token: newToken, user: userData } = response.data;
+                
+                localStorage.setItem('token', newToken);
+                localStorage.setItem('user', JSON.stringify(userData));
+
+                let redirectPath = '/';
+                if (userData.role === 'administrador') {
+                    redirectPath = '/dashboard';
+                } else if (userData.role === 'mesero') {
+                    redirectPath = '/mesero';
+                } else if (userData.role === 'cocinero') {
+                    redirectPath = '/cocina';
+                }
+
+                window.location.href = `/#${redirectPath}`;
+                window.location.reload();
+            }
+
+            function logout() {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                window.location.href = '/#/';
+                window.location.reload();
+            }
+            
+            function loadUserFromStorage() {
+                const storedUser = localStorage.getItem('user');
+                if (storedUser) {
+                    user.value = JSON.parse(storedUser);
+                }
+            }
+
+            function hasRole(roles) {
+                if (!user.value || !user.value.role) return false;
+                return roles.includes(user.value.role);
+            }
+
+            return { user, token, isAuthenticated, isLoginModalOpen, openLoginModal, closeLoginModal, login, logout, hasRole, loadUserFromStorage };
+        });
+        
+        // --- STORE DEL CARRITO ---
+        const useCartStore = defineStore('cart', () => {
+            const items = ref([]);
+            const mesaNombre = ref('Cliente');
+            const consumerOrderId = ref(localStorage.getItem('consumerOrderId') || null);
+
+            const totalItems = computed(() => items.value.reduce((acc, item) => acc + item.cantidad, 0));
+            const subtotal = computed(() => items.value.reduce((acc, item) => acc + (item.precio * item.cantidad), 0));
+            const impuestos = computed(() => subtotal.value * 0.16);
+            const total = computed(() => subtotal.value + impuestos.value);
+
+            function addItem(producto) {
+                const existingItem = items.value.find(item => item.id === producto.id);
+                if (existingItem) existingItem.cantidad++;
+                else items.value.push({ ...producto, cantidad: 1 });
+            }
+            function removeItem(productoId) {
+                items.value = items.value.filter(item => item.id !== productoId);
+            }
+            function updateQuantity(productoId, cantidad) {
+                const item = items.value.find(i => i.id === productoId);
+                if (item) (cantidad > 0) ? item.cantidad = cantidad : removeItem(productoId);
+            }
+            async function submitPedido() {
+                if (items.value.length === 0) return false;
+                const pedidoBody = {
+                    mesa_nombre: mesaNombre.value,
+                    detalles: items.value.map(item => ({ productoId: item.id, cantidad: item.cantidad }))
+                };
+                const response = await apiClient.post('/pedidos', pedidoBody);
+                const newOrderId = response.data.id;
+                consumerOrderId.value = newOrderId;
+                localStorage.setItem('consumerOrderId', newOrderId);
+                resetCart();
+                router.push('/mi-pedido');
+                return true;
+            }
+             async function submitWaiterPedido() {
+                if (items.value.length === 0) return false;
+                const pedidoBody = {
+                    mesa_nombre: mesaNombre.value,
+                    detalles: items.value.map(item => ({ productoId: item.id, cantidad: item.cantidad })),
+                    estado: 'en preparacion'
+                };
+                await apiClient.post('/pedidos', pedidoBody);
+                resetCart();
+                return true;
+            }
+            function resetCart() { items.value = []; }
+            function clearConsumerOrder() {
+                consumerOrderId.value = null;
+                localStorage.removeItem('consumerOrderId');
+            }
+            return { items, mesaNombre, totalItems, subtotal, total, consumerOrderId, addItem, removeItem, updateQuantity, submitPedido, submitWaiterPedido, resetCart, clearConsumerOrder };
+        });
+
+        // --- COMPONENTES Y VISTAS ---
+        const formatCurrency = (value) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(value || 0);
+        
+        const LoginModal = {
+            template: `
+                <div v-if="auth.isLoginModalOpen" @click.self="auth.closeLoginModal()" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div class="w-full max-w-md bg-white rounded-lg shadow-md p-8 relative">
+                        <button @click="auth.closeLoginModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+                            <i class="ph ph-x text-2xl"></i>
+                        </button>
+                        <div class="text-center mb-8">
+                            <i class="ph-duotone ph-storefront text-6xl text-emerald-500"></i>
+                            <h1 class="text-3xl font-bold text-gray-800 mt-2">Acceso Staff</h1>
+                            <p class="text-gray-500">Inicia sesión para continuar</p>
+                        </div>
+                        <form @submit.prevent="handleLogin">
+                            <div v-if="error" class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6" role="alert">
+                                <p>{{ error }}</p>
+                            </div>
+                            <div class="mb-4">
+                                <label for="username" class="block text-sm font-medium text-gray-700">Usuario</label>
+                                <input v-model="username" type="text" id="username" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" required>
+                            </div>
+                            <div class="mb-6">
+                                <label for="password" class="block text-sm font-medium text-gray-700">Contraseña</label>
+                                <input v-model="password" type="password" id="password" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" required>
+                            </div>
+                            <button type="submit" :disabled="loading" class="w-full py-3 px-4 bg-emerald-500 text-white font-bold rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-75 disabled:cursor-not-allowed flex items-center justify-center">
+                                <i v-if="loading" class="ph-duotone ph-spinner-gap animate-spin text-2xl mr-2"></i>
+                                <span>{{ loading ? 'Ingresando...' : 'Ingresar' }}</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>`,
+            setup() {
+                const auth = useAuthStore();
+                const username = ref('');
+                const password = ref('');
+                const loading = ref(false);
+                const error = ref(null);
+                const handleLogin = async () => {
+                    loading.value = true;
+                    error.value = null;
+                    try {
+                        await auth.login({ username: username.value, password: password.value });
+                    } catch (err) {
+                        error.value = err.response?.data?.message || 'Error al iniciar sesión. Inténtalo de nuevo.';
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+                return { auth, username, password, loading, error, handleLogin };
+            }
+        };
+
+        const CartComponent = {
+            props: { isWaiter: { type: Boolean, default: false } },
+            template: `
+                <div class="bg-white rounded-lg shadow-lg p-6 flex flex-col h-full">
+                    <h2 class="text-2xl font-bold text-gray-800 border-b pb-4 mb-4">Orden Actual</h2>
+                    <div v-if="isWaiter" class="mb-4">
+                        <label for="mesa" class="block text-sm font-medium text-gray-700">Nombre de la Mesa / Cliente</label>
+                        <input type="text" id="mesa" v-model="cart.mesaNombre" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+                    </div>
+                    <div class="flex-1 overflow-y-auto pr-2">
+                        <div v-if="cart.items.length === 0" class="text-center text-gray-500 py-10">
+                            <i class="ph-duotone ph-shopping-cart text-5xl"></i>
+                            <p class="mt-2">Añade productos para empezar</p>
+                        </div>
+                        <ul v-else class="divide-y divide-gray-200">
+                            <li v-for="item in cart.items" :key="item.id" class="py-3 flex items-center">
+                                <div class="flex-1">
+                                    <p class="font-semibold text-gray-800">{{ item.nombre }}</p>
+                                    <p class="text-sm text-gray-500">{{ formatCurrency(item.precio) }}</p>
+                                </div>
+                                <div class="flex items-center">
+                                    <input type="number" min="1" :value="item.cantidad" @change="updateQuantity(item.id, $event.target.value)" class="w-16 text-center border-gray-300 rounded-md">
+                                    <button @click="cart.removeItem(item.id)" class="ml-3 text-red-500 hover:text-red-700">
+                                        <i class="ph ph-trash text-xl"></i>
+                                    </button>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                    <div v-if="cart.totalItems > 0" class="border-t pt-4 mt-4 space-y-2 text-gray-700">
+                        <div class="flex justify-between"><span>Subtotal</span><span class="font-medium">{{ formatCurrency(cart.subtotal) }}</span></div>
+                        <div class="flex justify-between"><span>Impuestos (16%)</span><span class="font-medium">{{ formatCurrency(cart.impuestos) }}</span></div>
+                        <div class="flex justify-between text-xl font-bold text-gray-900"><span>Total</span><span>{{ formatCurrency(cart.total) }}</span></div>
+                    </div>
+                    <div class="mt-6">
+                        <button @click="handleCheckout" class="w-full py-3 px-4 bg-emerald-500 text-white font-bold rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50" :disabled="cart.totalItems === 0 || isSubmitting">
+                            <span v-if="isSubmitting">Enviando...</span>
+                            <span v-else>{{ isWaiter ? 'Enviar a Cocina' : 'Realizar Pedido' }}</span>
+                        </button>
+                    </div>
+                </div>`,
+            setup(props) {
+                const cart = useCartStore();
+                const isSubmitting = ref(false);
+                const updateQuantity = (id, newQty) => cart.updateQuantity(id, parseInt(newQty, 10));
+                const handleCheckout = async () => {
+                    if (isSubmitting.value) return;
+                    isSubmitting.value = true;
+                    try {
+                        if (props.isWaiter) {
+                            const success = await cart.submitWaiterPedido();
+                            if (success) alert('¡Pedido enviado a cocina!');
+                        } else {
+                            await cart.submitPedido();
+                        }
+                    } catch (error) {
+                        console.error("Error al enviar el pedido:", error);
+                        alert("Hubo un problema al enviar tu pedido. Inténtalo de nuevo.");
+                    } finally {
+                        isSubmitting.value = false;
+                    }
+                }
+                return { cart, isSubmitting, formatCurrency, updateQuantity, handleCheckout };
+            }
+        };
+
+        const ProductCard = {
+            props: ['product'],
+            emits: ['add-to-cart'],
+            template: `
+                <div @click="$emit('add-to-cart', product)" class="bg-white rounded-lg shadow-md overflow-hidden cursor-pointer hover:shadow-xl transition-shadow duration-300 transform hover:-translate-y-1">
+                    <div class="h-32 bg-gray-200 flex items-center justify-center"><i class="ph-duotone ph-hamburger text-6xl text-gray-400"></i></div>
+                    <div class="p-4">
+                        <h3 class="font-semibold text-gray-800 truncate">{{ product.nombre }}</h3>
+                        <p class="text-emerald-600 font-bold mt-1">{{ formatCurrency(product.precio) }}</p>
+                    </div>
+                </div>`,
+             setup() {
+                return { formatCurrency };
+            }
+        };
+
+        const TakeOrderView = {
+            components: { ProductCard, CartComponent },
+            template: `
+                <div class="flex flex-col md:flex-row gap-6 h-full">
+                    <div class="w-full md:w-2/3">
+                        <div class="mb-4"><input type="text" v-model="searchTerm" placeholder="Buscar producto..." class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+                        <div class="flex flex-wrap gap-2 mb-6">
+                             <button @click="selectedCategory = null" :class="{'bg-emerald-500 text-white': selectedCategory === null, 'bg-white text-gray-700': selectedCategory !== null}" class="px-4 py-2 rounded-full shadow-sm text-sm font-medium hover:bg-emerald-100 transition-colors">Todos</button>
+                            <button v-for="category in categories" :key="category.id" @click="selectedCategory = category.id" :class="{'bg-emerald-500 text-white': selectedCategory === category.id, 'bg-white text-gray-700': selectedCategory !== category.id}" class="px-4 py-2 rounded-full shadow-sm text-sm font-medium hover:bg-emerald-100 transition-colors">{{ category.nombre }}</button>
+                        </div>
+                        <div v-if="loading" class="text-center py-10"><i class="ph-duotone ph-spinner-gap animate-spin text-5xl text-emerald-500"></i><p class="mt-2 text-gray-600">Cargando productos...</p></div>
+                        <div v-else-if="filteredProducts.length === 0" class="text-center py-10"><i class="ph-duotone ph-smiley-sad text-5xl text-gray-400"></i><p class="mt-2 text-gray-600">No se encontraron productos.</p></div>
+                        <transition-group name="slide-up" tag="div" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                             <ProductCard v-for="product in filteredProducts" :key="product.id" :product="product" @add-to-cart="cart.addItem"/>
+                        </transition-group>
+                    </div>
+                    <div class="w-full md:w-1/3 hidden md:flex flex-col"><CartComponent :is-waiter="false" /></div>
+                </div>`,
+            setup() {
+                const cart = useCartStore();
+                const products = ref([]);
+                const categories = ref([]);
+                const loading = ref(true);
+                const searchTerm = ref('');
+                const selectedCategory = ref(null);
+                const fetchProductsAndCategories = async () => {
+                    try {
+                        loading.value = true;
+                        const productsRes = await apiClient.get('/productos');
+                        products.value = productsRes.data;
+                        const uniqueCategories = productsRes.data.reduce((acc, p) => {
+                            if (p.categoria && !acc.some(c => c.id === p.categoria.id)) acc.push(p.categoria);
+                            return acc;
+                        }, []);
+                        categories.value = uniqueCategories;
+                    } catch (error) {
+                        console.error("Error al cargar datos:", error);
+                        alert("No se pudo conectar con el servidor. Asegúrate de que el backend esté corriendo y los endpoints de productos sean públicos.");
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+                const filteredProducts = computed(() => {
+                    let filtered = products.value;
+                    if (selectedCategory.value) filtered = filtered.filter(p => p.categoriaId === selectedCategory.value);
+                    if (searchTerm.value) filtered = filtered.filter(p => p.nombre.toLowerCase().includes(searchTerm.value.toLowerCase()));
+                    return filtered;
+                });
+                onMounted(fetchProductsAndCategories);
+                return { cart, products, categories, loading, searchTerm, selectedCategory, filteredProducts };
+            }
+        };
+
+        const WaiterOrderView = {
+            components: { ProductCard, CartComponent },
+            template: `
+                <div class="flex flex-col md:flex-row gap-6 h-full">
+                    <div class="w-full md:w-2/3">
+                        <div class="mb-4"><input type="text" v-model="searchTerm" placeholder="Buscar producto..." class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+                        <div class="flex flex-wrap gap-2 mb-6">
+                             <button @click="selectedCategory = null" :class="{'bg-emerald-500 text-white': selectedCategory === null, 'bg-white text-gray-700': selectedCategory !== null}" class="px-4 py-2 rounded-full shadow-sm text-sm font-medium hover:bg-emerald-100 transition-colors">Todos</button>
+                            <button v-for="category in categories" :key="category.id" @click="selectedCategory = category.id" :class="{'bg-emerald-500 text-white': selectedCategory === category.id, 'bg-white text-gray-700': selectedCategory !== category.id}" class="px-4 py-2 rounded-full shadow-sm text-sm font-medium hover:bg-emerald-100 transition-colors">{{ category.nombre }}</button>
+                        </div>
+                        <div v-if="loading" class="text-center py-10"><i class="ph-duotone ph-spinner-gap animate-spin text-5xl text-emerald-500"></i><p class="mt-2 text-gray-600">Cargando productos...</p></div>
+                        <div v-else-if="filteredProducts.length === 0" class="text-center py-10"><i class="ph-duotone ph-smiley-sad text-5xl text-gray-400"></i><p class="mt-2 text-gray-600">No se encontraron productos.</p></div>
+                        <transition-group name="slide-up" tag="div" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                             <ProductCard v-for="product in filteredProducts" :key="product.id" :product="product" @add-to-cart="cart.addItem"/>
+                        </transition-group>
+                    </div>
+                    <div class="w-full md:w-1/3"><CartComponent :is-waiter="true" /></div>
+                </div>`,
+            setup() {
+                const cart = useCartStore();
+                const products = ref([]);
+                const categories = ref([]);
+                const loading = ref(true);
+                const searchTerm = ref('');
+                const selectedCategory = ref(null);
+                const fetchProductsAndCategories = async () => {
+                    try {
+                        loading.value = true;
+                        const productsRes = await apiClient.get('/productos');
+                        products.value = productsRes.data;
+                        const uniqueCategories = productsRes.data.reduce((acc, p) => {
+                            if (p.categoria && !acc.some(c => c.id === p.categoria.id)) acc.push(p.categoria);
+                            return acc;
+                        }, []);
+                        categories.value = uniqueCategories;
+                    } catch (error) {
+                        console.error("Error al cargar datos:", error);
+                        alert("No se pudo conectar con el servidor.");
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+                const filteredProducts = computed(() => {
+                    let filtered = products.value;
+                    if (selectedCategory.value) filtered = filtered.filter(p => p.categoriaId === selectedCategory.value);
+                    if (searchTerm.value) filtered = filtered.filter(p => p.nombre.toLowerCase().includes(searchTerm.value.toLowerCase()));
+                    return filtered;
+                });
+                onMounted(fetchProductsAndCategories);
+                return { cart, products, categories, loading, searchTerm, selectedCategory, filteredProducts };
+            }
+        };
+
+        const KitchenView = {
+            template: `
+                <div class="p-2">
+                     <div v-if="loading" class="text-center py-20"><i class="ph-duotone ph-spinner-gap animate-spin text-6xl text-emerald-500"></i><p class="mt-4 text-xl text-gray-600">Cargando pedidos...</p></div>
+                    <div v-else-if="activePedidos.length === 0" class="text-center py-20"><i class="ph-duotone ph-coffee text-6xl text-gray-400"></i><p class="mt-4 text-xl text-gray-600">No hay pedidos para preparar.</p></div>
+                    <transition-group v-else name="slide-up" tag="div" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        <div v-for="pedido in activePedidos" :key="pedido.id" class="bg-white rounded-lg shadow-md p-5 flex flex-col">
+                            <div class="flex justify-between items-start mb-3">
+                                <h3 class="text-xl font-bold text-gray-800">{{ pedido.mesa_nombre }} - #{{ pedido.id }}</h3>
+                                <span class="text-lg font-bold text-red-600 bg-red-100 px-3 py-1 rounded-full flex items-center gap-1">
+                                    <i class="ph-duotone ph-timer"></i>
+                                    <span>{{ calculateElapsedTime(pedido.createdAt) }}</span>
+                                </span>
+                            </div>
+                            <ul class="flex-1 border-t border-b border-gray-200 py-3 my-3 space-y-2">
+                                <li v-for="detalle in pedido.detalles" :key="detalle.id" class="flex justify-between items-center"><span class="text-gray-700">{{ detalle.producto.nombre }}</span><span class="font-bold text-emerald-600">x {{ detalle.cantidad }}</span></li>
+                            </ul>
+                            <button @click="updateOrderStatus(pedido.id, 'listo para entregar')" class="w-full mt-4 bg-green-500 text-white font-bold py-2 rounded-lg hover:bg-green-600 transition-colors">Pedido Listo</button>
+                        </div>
+                    </transition-group>
+                </div>`,
+            setup() {
+                const pedidos = ref([]);
+                const loading = ref(true);
+                const currentTime = ref(new Date());
+                let timerIntervalId = null;
+                let socket;
+
+                const fetchPedidos = async () => {
+                    try {
+                        loading.value = true;
+                        const response = await apiClient.get('/pedidos');
+                        pedidos.value = response.data;
+                    } catch (error) {
+                        console.error("Error cargando pedidos:", error);
+                        alert("No se pudo conectar con el servidor.");
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+                const activePedidos = computed(() => {
+                    return pedidos.value.filter(p => p.estado === 'en preparacion').sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                });
+
+                const updateOrderStatus = async (pedidoId, nuevoEstado) => {
+                    try { 
+                        await apiClient.patch(`/pedidos/${pedidoId}/estado`, { estado: nuevoEstado });
+                    } catch (error) {
+                        console.error("Error al actualizar estado:", error);
+                        alert("No se pudo actualizar el pedido.");
+                    }
+                };
+
+                const calculateElapsedTime = (startTime) => {
+                    const start = new Date(startTime);
+                    const elapsed = Math.floor((currentTime.value.getTime() - start.getTime()) / 1000);
+                    if (elapsed < 0) return '00:00';
+                    const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
+                    const seconds = (elapsed % 60).toString().padStart(2, '0');
+                    return `${minutes}:${seconds}`;
+                };
+
+                onMounted(() => {
+                    fetchPedidos();
+                    timerIntervalId = setInterval(() => { currentTime.value = new Date(); }, 1000);
+                    socket = io(backendUrl);
+                    socket.on("connect", () => console.log("Conectado al servidor de sockets en Cocina:", socket.id));
+                    socket.on("nuevo_pedido", (nuevoPedido) => { pedidos.value.unshift(nuevoPedido); });
+                    socket.on("pedido_actualizado", (pedidoActualizado) => {
+                        const index = pedidos.value.findIndex(p => p.id === pedidoActualizado.id);
+                        if (index !== -1) {
+                            pedidos.value[index] = pedidoActualizado;
+                        } else {
+                            pedidos.value.unshift(pedidoActualizado);
+                        }
+                    });
+                });
+
+                onBeforeUnmount(() => {
+                    if (socket) socket.disconnect();
+                    if (timerIntervalId) clearInterval(timerIntervalId);
+                });
+
+                return { loading, activePedidos, updateOrderStatus, calculateElapsedTime };
+            }
+        };
+
+        const OrdersHistoryView = {
+            template: `
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold text-gray-800">Historial de Pedidos</h2><button @click="fetchPedidos" class="text-emerald-500 hover:text-emerald-700"><i class="ph ph-arrow-clockwise text-2xl"></i></button></div>
+                    <div v-if="loading" class="text-center py-10"><i class="ph-duotone ph-spinner-gap animate-spin text-4xl text-emerald-500"></i></div>
+                     <div v-else-if="pedidos.length === 0" class="text-center py-10"><i class="ph-duotone ph-archive text-5xl text-gray-400"></i><p class="mt-2 text-gray-600">Aún no hay pedidos registrados.</p></div>
+                    <div v-else class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="p-3 text-sm font-semibold text-gray-600">ID</th><th class="p-3 text-sm font-semibold text-gray-600">Mesa/Cliente</th><th class="p-3 text-sm font-semibold text-gray-600">Fecha</th><th class="p-3 text-sm font-semibold text-gray-600">Total</th><th class="p-3 text-sm font-semibold text-gray-600">Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                <tr v-for="pedido in pedidos" :key="pedido.id" class="hover:bg-gray-50">
+                                    <td class="p-3 text-sm text-gray-700">#{{ pedido.id }}</td><td class="p-3 text-sm text-gray-700 font-medium">{{ pedido.mesa_nombre }}</td><td class="p-3 text-sm text-gray-500">{{ formatDateTime(pedido.createdAt) }}</td><td class="p-3 text-sm text-gray-800 font-bold">{{ formatCurrency(pedido.total) }}</td>
+                                    <td class="p-3 text-sm"><span :class="getStatusClass(pedido.estado)" class="px-2 py-1 rounded-full text-xs font-medium">{{ pedido.estado }}</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>`,
+            setup() {
+                const pedidos = ref([]);
+                const loading = ref(true);
+                const fetchPedidos = async () => {
+                    try {
+                        loading.value = true;
+                        const response = await apiClient.get('/pedidos');
+                        pedidos.value = response.data;
+                    } catch (error) {
+                        console.error("Error cargando pedidos:", error);
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+                const formatDateTime = (dateString) => new Date(dateString).toLocaleString('es-MX');
+                const getStatusClass = (estado) => {
+                    const classes = {'pagado': 'bg-green-100 text-green-800','abierto': 'bg-yellow-100 text-yellow-800','cancelado': 'bg-red-100 text-red-800'};
+                    return classes[estado] || 'bg-gray-100 text-gray-800';
+                };
+                onMounted(fetchPedidos);
+                return { pedidos, loading, fetchPedidos, formatCurrency, formatDateTime, getStatusClass };
+            }
+        };
+        
+        const MyOrderView = {
+            components: { CartComponent },
+            template: `
+                <div class="max-w-lg mx-auto">
+                    <CartComponent v-if="cart.items.length > 0 && !cart.consumerOrderId" />
+                    <div v-else>
+                        <div v-if="loading" class="text-center py-20">
+                            <i class="ph-duotone ph-spinner-gap animate-spin text-5xl text-emerald-500"></i>
+                        </div>
+                        <div v-else-if="!cart.consumerOrderId" class="text-center py-20 bg-white rounded-lg shadow-sm">
+                            <i class="ph-duotone ph-receipt text-6xl text-gray-300"></i>
+                            <h2 class="mt-4 text-2xl font-bold text-gray-700">No tienes un pedido activo</h2>
+                            <p class="text-gray-500 mt-2">Una vez que ordenes, podrás ver el estado aquí.</p>
+                            <router-link to="/" class="mt-6 inline-block bg-emerald-500 text-white font-bold py-2 px-6 rounded-lg">
+                                Empezar a Ordenar
+                            </router-link>
+                        </div>
+                        <div v-else-if="error" class="text-center py-20 bg-white rounded-lg shadow-sm">
+                            <i class="ph-duotone ph-x-circle text-6xl text-red-400"></i>
+                            <h2 class="mt-4 text-2xl font-bold text-gray-700">No se encontró tu pedido</h2>
+                            <p class="text-gray-500 mt-2">{{ error }}</p>
+                            <button @click="startNewOrder" class="mt-6 inline-block bg-gray-600 text-white font-bold py-2 px-6 rounded-lg">
+                                Limpiar y ordenar de nuevo
+                            </button>
+                        </div>
+                        <div v-else-if="pedido" class="bg-white rounded-lg shadow-md p-6">
+                            <div class="text-center border-b pb-4 mb-4">
+                                <p class="text-sm text-gray-500">ID de tu Pedido</p>
+                                <h2 class="text-3xl font-bold text-emerald-600">#{{ pedido.id }}</h2>
+                            </div>
+                            <div class="text-center my-8">
+                                <p class="text-sm text-gray-500">Estado Actual</p>
+                                <div class="mt-2 inline-flex items-center gap-3 px-6 py-3 rounded-full text-2xl font-bold" :class="statusInfo.class">
+                                    <i :class="statusInfo.icon"></i>
+                                    <span>{{ statusInfo.text }}</span>
+                                </div>
+                            </div>
+                            <ul class="space-y-2 mb-6">
+                                <li v-for="detalle in pedido.detalles" :key="detalle.id" class="flex justify-between items-center text-gray-700">
+                                    <span>{{ detalle.cantidad }}x {{ detalle.producto.nombre }}</span>
+                                    <span class="font-medium">{{ formatCurrency(detalle.cantidad * detalle.precio_unitario) }}</span>
+                                </li>
+                            </ul>
+                            <div class="border-t pt-4 flex justify-between text-xl font-bold">
+                                <span>Total:</span>
+                                <span>{{ formatCurrency(pedido.total) }}</span>
+                            </div>
+                            <div v-if="pedido.estado === 'pagado' || pedido.estado === 'cancelado'" class="text-center mt-8">
+                                <button @click="startNewOrder" class="bg-emerald-500 text-white font-bold py-2 px-6 rounded-lg">
+                                    Crear un Nuevo Pedido
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`,
+            setup() {
+                const cart = useCartStore();
+                const router = VueRouter.useRouter();
+                const pedido = ref(null);
+                const loading = ref(true);
+                const error = ref(null);
+                let socket;
+                const fetchPedido = async () => {
+                    if (!cart.consumerOrderId) {
+                        loading.value = false;
+                        return;
+                    }
+                    loading.value = true;
+                    error.value = null;
+                    try {
+                        const response = await apiClient.get(`/pedidos/${cart.consumerOrderId}`);
+                        pedido.value = response.data;
+                    } catch (err) {
+                        console.error("Error fetching order:", err);
+                        if (err.response && err.response.status === 404) {
+                            error.value = "No se encontró el pedido. Puede que la ID sea antigua o que el pedido ya no exista en el sistema.";
+                        } else {
+                            error.value = "No se pudo conectar con el servidor para verificar tu pedido.";
+                        }
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+                const statusInfo = computed(() => {
+                    if (!pedido.value) return {};
+                    switch(pedido.value.estado) {
+                        case 'en validacion': return { text: 'Validando Pedido', icon: 'ph-duotone ph-question', class: 'bg-gray-100 text-gray-800' };
+                        case 'en preparacion': return { text: 'En preparación', icon: 'ph-duotone ph-fire', class: 'bg-yellow-100 text-yellow-800' };
+                        case 'listo para entregar': return { text: '¡Listo para entregar!', icon: 'ph-duotone ph-bell', class: 'bg-blue-100 text-blue-800' };
+                        case 'entregado': return { text: 'Pedido Entregado', icon: 'ph-duotone ph-smiley', class: 'bg-purple-100 text-purple-800' };
+                        case 'pagado': return { text: '¡Buen provecho!', icon: 'ph-duotone ph-check-circle', class: 'bg-green-100 text-green-800' };
+                        case 'cancelado': return { text: 'Cancelado', icon: 'ph-duotone ph-x-circle', class: 'bg-red-100 text-red-800' };
+                        default: return { text: 'Desconocido', icon: 'ph-duotone ph-question', class: 'bg-gray-100 text-gray-800' };
+                    }
+                });
+                const startNewOrder = () => {
+                    cart.clearConsumerOrder();
+                    router.push('/');
+                };
+                onMounted(() => {
+                    fetchPedido();
+                    socket = io(backendUrl);
+                    socket.on('connect', () => console.log('Socket conectado en Mi Pedido'));
+                    socket.on('pedido_actualizado', (pedidoActualizado) => {
+                        if (String(pedidoActualizado.id) === String(cart.consumerOrderId)) {
+                            pedido.value = pedidoActualizado;
+                        }
+                    });
+                });
+                watch(() => cart.consumerOrderId, (newId) => { if (newId) fetchPedido(); });
+                onBeforeUnmount(() => { if (socket) socket.disconnect(); });
+                return { cart, pedido, loading, error, statusInfo, formatCurrency, startNewOrder };
+            }
+        };
+
+        const DashboardView = {
+            template: `
+                <div v-if="loading" class="text-center py-20">
+                    <i class="ph-duotone ph-spinner-gap animate-spin text-5xl text-emerald-500"></i>
+                    <p class="mt-4 text-gray-600">Cargando estadísticas...</p>
+                </div>
+                <div v-else-if="stats" class="space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="bg-white p-6 rounded-lg shadow-md flex items-center gap-4">
+                            <i class="ph-duotone ph-chart-bar text-4xl text-blue-500"></i>
+                            <div>
+                                <p class="text-sm text-gray-500">Ventas Totales</p>
+                                <p class="text-2xl font-bold text-gray-800">{{ formatCurrency(stats.totalSales) }}</p>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow-md flex items-center gap-4">
+                            <i class="ph-duotone ph-sun text-4xl text-yellow-500"></i>
+                            <div>
+                                <p class="text-sm text-gray-500">Ventas de Hoy</p>
+                                <p class="text-2xl font-bold text-gray-800">{{ formatCurrency(stats.todaySales) }}</p>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow-md flex items-center gap-4">
+                            <i class="ph-duotone ph-receipt text-4xl text-green-500"></i>
+                            <div>
+                                <p class="text-sm text-gray-500">Pedidos de Hoy</p>
+                                <p class="text-2xl font-bold text-gray-800">{{ stats.todayOrdersCount }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-md">
+                            <h3 class="font-semibold mb-4">Ventas de los Últimos 7 Días</h3>
+                            <canvas ref="salesChartCanvas"></canvas>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow-md">
+                            <h3 class="font-semibold mb-4">Productos Más Vendidos</h3>
+                            <ul v-if="stats.topSellingProducts.length > 0" class="space-y-3">
+                                <li v-for="(item, index) in stats.topSellingProducts" :key="item.productoId" class="flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <span class="font-bold text-gray-400">{{ index + 1 }}</span>
+                                        <span class="text-gray-700">{{ item.producto ? item.producto.nombre : 'Producto no disponible' }}</span>
+                                    </div>
+                                    <span class="font-bold bg-gray-100 px-2 py-1 rounded">{{ item.totalVendido }}</span>
+                                </li>
+                            </ul>
+                            <p v-else class="text-gray-500 text-center py-8">No hay datos de ventas.</p>
+                        </div>
+                    </div>
+                </div>`,
+            setup() {
+                const loading = ref(true);
+                const stats = ref(null);
+                const salesChartCanvas = ref(null);
+                let chartInstance = null;
+                const renderChart = () => {
+                    if (chartInstance) {
+                        chartInstance.destroy();
+                    }
+                    if (salesChartCanvas.value && stats.value) {
+                        const ctx = salesChartCanvas.value.getContext('2d');
+                        chartInstance = new Chart(ctx, {
+                            type: 'bar',
+                            data: {
+                                labels: stats.value.salesLast7Days.map(d => d.date),
+                                datasets: [{
+                                    label: 'Ventas ($)',
+                                    data: stats.value.salesLast7Days.map(d => d.total),
+                                    backgroundColor: 'rgba(16, 185, 129, 0.6)',
+                                    borderColor: 'rgba(16, 185, 129, 1)',
+                                    borderWidth: 1
+                                }]
+                            },
+                            options: { scales: { y: { beginAtZero: true } }, responsive: true, maintainAspectRatio: false }
+                        });
+                    }
+                };
+                
+                const fetchStats = async () => {
+                    try {
+                        loading.value = true;
+                        const response = await apiClient.get('/dashboard');
+                        stats.value = response.data;
+                        await nextTick();
+                        renderChart();
+                    } catch (error) {
+                        console.error("Error al cargar el dashboard:", error);
+                        alert("No se pudieron cargar las estadísticas. Asegúrate de tener permisos de administrador.");
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+                onMounted(fetchStats);
+                onBeforeUnmount(() => { if (chartInstance) chartInstance.destroy(); });
+
+                return { loading, stats, salesChartCanvas, formatCurrency };
+            }
+        };
+
+        const WaiterView = {
+            template: `
+                <div class="p-2">
+                     <div v-if="loading" class="text-center py-20"><i class="ph-duotone ph-spinner-gap animate-spin text-6xl text-emerald-500"></i><p class="mt-4 text-xl text-gray-600">Cargando pedidos...</p></div>
+                    <div v-else-if="activePedidos.length === 0" class="text-center py-20"><i class="ph-duotone ph-coffee text-6xl text-gray-400"></i><p class="mt-4 text-xl text-gray-600">No hay pedidos por gestionar.</p></div>
+                    <transition-group v-else name="slide-up" tag="div" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        <div v-for="pedido in activePedidos" :key="pedido.id" class="bg-white rounded-lg shadow-md p-5 flex flex-col" :class="getCardBorder(pedido.estado)">
+                            <div class="flex justify-between items-start mb-3">
+                                <h3 class="text-xl font-bold text-gray-800">{{ pedido.mesa_nombre }} - #{{ pedido.id }}</h3>
+                                <span class="text-lg font-bold flex items-center gap-1" :class="getStatusColor(pedido.estado)">
+                                    <i class="ph-duotone ph-timer"></i>
+                                    <span>{{ calculateElapsedTime(pedido.createdAt) }}</span>
+                                </span>
+                            </div>
+                            <p class="mb-3 font-semibold" :class="getStatusColor(pedido.estado)">Estado: {{ getStatusText(pedido.estado) }}</p>
+                            <ul class="flex-1 border-t border-b border-gray-200 py-3 my-3 space-y-2">
+                                <li v-for="detalle in pedido.detalles" :key="detalle.id" class="flex justify-between items-center"><span class="text-gray-700">{{ detalle.producto.nombre }}</span><span class="font-bold text-emerald-600">x {{ detalle.cantidad }}</span></li>
+                            </ul>
+                            <div class="mt-4 space-y-2">
+                                <button v-if="pedido.estado === 'en validacion'" @click="confirmAction(pedido, 'en preparacion')" class="w-full bg-blue-500 text-white font-bold py-2 rounded-lg hover:bg-blue-600">Validar Pedido</button>
+                                <button v-if="pedido.estado === 'listo para entregar'" @click="confirmAction(pedido, 'entregado')" class="w-full bg-purple-500 text-white font-bold py-2 rounded-lg hover:bg-purple-600">Marcar como Entregado</button>
+                                
+                                <div v-if="pedido.estado === 'entregado' || (pedido.estado === 'listo para entregar' && pedido.pagado === false)" class="flex gap-2">
+                                    <button @click="confirmAction(pedido, 'pagar')" class="w-full bg-emerald-500 text-white font-bold py-2 rounded-lg hover:bg-emerald-600 disabled:opacity-50" :disabled="pedido.pagado">
+                                        {{ pedido.pagado ? 'Pagado' : 'Pagar' }}
+                                    </button>
+                                    <button v-if="!pedido.pagado" @click="confirmAction(pedido, 'cancelar')" class="w-full bg-red-500 text-white font-bold py-2 rounded-lg hover:bg-red-600">Cancelar</button>
+                                </div>
+                                <span v-if="pedido.pagado" class="mt-2 text-center block font-bold text-green-600">PAGADO</span>
+                            </div>
+                        </div>
+                    </transition-group>
+                </div>`,
+            setup() {
+                const pedidos = ref([]);
+                const loading = ref(true);
+                const currentTime = ref(new Date());
+                let timerIntervalId = null;
+                let socket;
+
+                const fetchPedidos = async () => {
+                    try {
+                        loading.value = true;
+                        const response = await apiClient.get('/pedidos');
+                        pedidos.value = response.data;
+                    } catch (error) {
+                        console.error("Error cargando pedidos:", error);
+                        alert("No se pudo conectar con el servidor.");
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+                const activePedidos = computed(() => {
+                    const activeStates = ['en validacion', 'en preparacion', 'listo para entregar', 'entregado'];
+                    return pedidos.value.filter(p => activeStates.includes(p.estado) && p.estado !== 'cancelado').sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                });
+
+                const confirmAction = (pedido, action) => {
+                    let message = '';
+                    if (action === 'pagar') message = `¿Confirmas que el pedido #${pedido.id} ha sido pagado?`;
+                    else if (action === 'cancelar') message = `¿Estás seguro de que quieres CANCELAR el pedido #${pedido.id}? Esta acción no se puede deshacer.`;
+                    else message = `¿Confirmas la acción para el pedido #${pedido.id}?`;
+                    
+                    if (confirm(message)) {
+                        if (action === 'pagar') {
+                            markAsPaid(pedido.id);
+                        } else {
+                            updateOrderStatus(pedido.id, action);
+                        }
+                    }
+                };
+
+                const updateOrderStatus = async (pedidoId, nuevoEstado) => {
+                    try { 
+                        await apiClient.patch(`/pedidos/${pedidoId}/estado`, { estado: nuevoEstado });
+                    } catch (error) {
+                        console.error("Error al actualizar estado:", error);
+                        alert("No se pudo actualizar el pedido.");
+                    }
+                };
+
+                const markAsPaid = async (pedidoId) => {
+                    try {
+                        await apiClient.patch(`/pedidos/${pedidoId}/pagar`);
+                    } catch(error) {
+                        console.error("Error al marcar como pagado:", error);
+                        alert("No se pudo marcar el pedido como pagado.");
+                    }
+                };
+
+                const calculateElapsedTime = (startTime) => {
+                    const start = new Date(startTime);
+                    const elapsed = Math.floor((currentTime.value.getTime() - start.getTime()) / 1000);
+                    if (elapsed < 0) return '00:00';
+                    const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
+                    const seconds = (elapsed % 60).toString().padStart(2, '0');
+                    return `${minutes}:${seconds}`;
+                };
+
+                const getStatusText = (estado) => {
+                    const map = {
+                        'en validacion': 'En Validación',
+                        'en preparacion': 'En Cocina',
+                        'listo para entregar': 'Listo para Entregar',
+                        'entregado': 'Entregado'
+                    };
+                    return map[estado] || 'Desconocido';
+                };
+
+                const getStatusColor = (estado) => {
+                    const map = {
+                        'en validacion': 'text-gray-500',
+                        'en preparacion': 'text-yellow-600',
+                        'listo para entregar': 'text-blue-600',
+                        'entregado': 'text-purple-600'
+                    };
+                    return map[estado] || 'text-gray-500';
+                };
+                
+                const getCardBorder = (estado) => {
+                    const map = {
+                        'en validacion': 'border-l-4 border-gray-400',
+                        'en preparacion': 'border-l-4 border-yellow-500',
+                        'listo para entregar': 'border-l-4 border-blue-500',
+                        'entregado': 'border-l-4 border-purple-500'
+                    };
+                    return map[estado] || '';
+                };
+
+                onMounted(() => {
+                    fetchPedidos();
+                    timerIntervalId = setInterval(() => { currentTime.value = new Date(); }, 1000);
+                    socket = io(backendUrl);
+                    socket.on("connect", () => console.log("Conectado al servidor de sockets en Mesero:", socket.id));
+                    socket.on("nuevo_pedido", (nuevoPedido) => { pedidos.value.unshift(nuevoPedido); });
+                    socket.on("pedido_actualizado", (pedidoActualizado) => {
+                        const index = pedidos.value.findIndex(p => p.id === pedidoActualizado.id);
+                        if (index !== -1) {
+                            pedidos.value[index] = pedidoActualizado;
+                        } else {
+                            pedidos.value.unshift(pedidoActualizado);
+                        }
+                    });
+                });
+
+                onBeforeUnmount(() => {
+                    if (socket) socket.disconnect();
+                    if (timerIntervalId) clearInterval(timerIntervalId);
+                });
+
+                return { loading, activePedidos, confirmAction, calculateElapsedTime, getStatusText, getStatusColor, getCardBorder };
+            }
+        };
+
+        const UserManagementView = {
+            template: `
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-gray-800">Gestión de Usuarios</h2>
+                        <button @click="openModal()" class="bg-emerald-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-emerald-600">
+                            <i class="ph ph-plus"></i>
+                            Añadir Usuario
+                        </button>
+                    </div>
+
+                    <div v-if="loading" class="text-center py-10"><i class="ph-duotone ph-spinner-gap animate-spin text-4xl text-emerald-500"></i></div>
+                    <div v-else class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="p-3 text-sm font-semibold text-gray-600">Nombre</th>
+                                    <th class="p-3 text-sm font-semibold text-gray-600">Username</th>
+                                    <th class="p-3 text-sm font-semibold text-gray-600">Rol</th>
+                                    <th class="p-3 text-sm font-semibold text-gray-600 text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                <tr v-for="user in users" :key="user.id" class="hover:bg-gray-50">
+                                    <td class="p-3 text-sm text-gray-700 font-medium">{{ user.nombre }}</td>
+                                    <td class="p-3 text-sm text-gray-500">{{ user.username }}</td>
+                                    <td class="p-3 text-sm text-gray-700 capitalize">{{ user.role }}</td>
+                                    <td class="p-3 text-sm text-right">
+                                        <button @click="openModal(user)" class="text-blue-500 hover:text-blue-700 mr-4">Editar</button>
+                                        <button @click="confirmDelete(user)" class="text-red-500 hover:text-red-700" :disabled="isCurrentUser(user.id)">Eliminar</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Modal para crear/editar usuario -->
+                <div v-if="isModalOpen" @click.self="closeModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div class="w-full max-w-md bg-white rounded-lg shadow-md p-8">
+                        <h3 class="text-2xl font-bold mb-6">{{ isEditMode ? 'Editar Usuario' : 'Añadir Usuario' }}</h3>
+                        <form @submit.prevent="handleSubmit">
+                            <div class="mb-4">
+                                <label for="nombre" class="block text-sm font-medium text-gray-700">Nombre Completo</label>
+                                <input v-model="currentUser.nombre" type="text" id="nombre" class="mt-1 block w-full" required>
+                            </div>
+                            <div class="mb-4">
+                                <label for="username" class="block text-sm font-medium text-gray-700">Username</label>
+                                <input v-model="currentUser.username" type="text" id="username" class="mt-1 block w-full" required>
+                            </div>
+                            <div class="mb-4">
+                                <label for="password" class="block text-sm font-medium text-gray-700">Contraseña</label>
+                                <input v-model="currentUser.password" type="password" id="password" class="mt-1 block w-full" :placeholder="isEditMode ? 'Dejar en blanco para no cambiar' : ''" :required="!isEditMode">
+                            </div>
+                            <div class="mb-6">
+                                <label for="role" class="block text-sm font-medium text-gray-700">Rol</label>
+                                <select v-model="currentUser.role" id="role" class="mt-1 block w-full" required>
+                                    <option value="mesero">Mesero</option>
+                                    <option value="cocinero">Cocinero</option>
+                                    <option value="administrador">Administrador</option>
+                                </select>
+                            </div>
+                            <div class="flex justify-end gap-4">
+                                <button type="button" @click="closeModal" class="px-4 py-2 bg-gray-200 rounded-lg">Cancelar</button>
+                                <button type="submit" class="px-4 py-2 bg-emerald-500 text-white rounded-lg">{{ isEditMode ? 'Guardar Cambios' : 'Crear Usuario' }}</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `,
+            setup() {
+                const auth = useAuthStore();
+                const users = ref([]);
+                const loading = ref(true);
+                const isModalOpen = ref(false);
+                const isEditMode = ref(false);
+                const currentUser = ref({});
+
+                const fetchUsers = async () => {
+                    try {
+                        loading.value = true;
+                        const response = await apiClient.get('/users');
+                        users.value = response.data;
+                    } catch (error) {
+                        console.error("Error al cargar usuarios:", error);
+                        alert("No se pudieron cargar los usuarios.");
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+                
+                const openModal = (user = null) => {
+                    if (user) {
+                        isEditMode.value = true;
+                        currentUser.value = { ...user, password: '' }; // Clonar para no modificar la lista directamente
+                    } else {
+                        isEditMode.value = false;
+                        currentUser.value = { nombre: '', username: '', password: '', role: 'mesero' };
+                    }
+                    isModalOpen.value = true;
+                };
+
+                const closeModal = () => {
+                    isModalOpen.value = false;
+                };
+
+                const handleSubmit = async () => {
+                    try {
+                        if (isEditMode.value) {
+                            await apiClient.put(`/users/${currentUser.value.id}`, currentUser.value);
+                        } else {
+                            await apiClient.post('/users', currentUser.value);
+                        }
+                        fetchUsers();
+                        closeModal();
+                    } catch (error) {
+                        console.error("Error al guardar usuario:", error);
+                        alert(error.response?.data?.message || 'No se pudo guardar el usuario.');
+                    }
+                };
+
+                const confirmDelete = (user) => {
+                    if (confirm(`¿Estás seguro de que quieres eliminar a ${user.nombre}?`)) {
+                        deleteUser(user.id);
+                    }
+                };
+
+                const deleteUser = async (userId) => {
+                    try {
+                        await apiClient.delete(`/users/${userId}`);
+                        fetchUsers();
+                    } catch (error) {
+                        console.error("Error al eliminar usuario:", error);
+                        alert(error.response?.data?.message || 'No se pudo eliminar el usuario.');
+                    }
+                };
+
+                const isCurrentUser = (userId) => {
+                    return auth.user?.id === userId;
+                };
+
+                onMounted(fetchUsers);
+
+                return { users, loading, isModalOpen, isEditMode, currentUser, openModal, closeModal, handleSubmit, confirmDelete, isCurrentUser };
+            }
+        };
+
+        // --- ROUTER ---
+        const MainLayout = {
+            components: { LoginModal },
+            template: `
+                <div class="flex flex-col h-screen">
+                    <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0">
+                        <div class="flex items-center gap-3">
+                            <i class="ph-duotone ph-storefront text-3xl text-emerald-500"></i>
+                            <h1 class="text-xl font-semibold text-gray-800">{{ $route.meta.title }}</h1>
+                        </div>
+                    </header>
+                    <main class="flex-1 overflow-y-auto p-4 pb-24">
+                        <router-view v-slot="{ Component }"><transition name="fade" mode="out-in"><component :is="Component" /></transition></router-view>
+                    </main>
+                    <nav class="fixed bottom-0 left-0 right-0 h-20 bg-white border-t border-gray-200 shadow-lg flex justify-around items-center z-10">
+                        <template v-if="!auth.isAuthenticated">
+                            <router-link to="/" class="bottom-nav-link flex flex-col items-center text-gray-600">
+                                <i class="ph-duotone ph-cooking-pot text-3xl"></i><span class="text-xs font-medium">Ordenar</span>
+                            </router-link>
+                            <router-link to="/mi-pedido" class="bottom-nav-link relative flex flex-col items-center text-gray-600">
+                                <span v-if="cart.totalItems > 0" class="absolute top-1 right-1/2 transform translate-x-3 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                                    {{ cart.totalItems }}
+                                </span>
+                                <i class="ph-duotone ph-receipt text-3xl"></i><span class="text-xs font-medium">Mi Pedido</span>
+                            </router-link>
+                            <button @click="auth.openLoginModal()" class="bottom-nav-link flex flex-col items-center text-gray-600">
+                                <i class="ph-duotone ph-user-circle text-3xl"></i><span class="text-xs font-medium">Staff</span>
+                            </button>
+                        </template>
+                        <template v-else>
+                             <router-link v-if="auth.hasRole(['administrador'])" to="/dashboard" class="bottom-nav-link flex flex-col items-center text-gray-600">
+                                <i class="ph-duotone ph-gauge text-3xl"></i><span class="text-xs font-medium">Dashboard</span>
+                            </router-link>
+                             <router-link v-if="auth.hasRole(['administrador'])" to="/users" class="bottom-nav-link flex flex-col items-center text-gray-600">
+                                <i class="ph-duotone ph-users-three text-3xl"></i><span class="text-xs font-medium">Usuarios</span>
+                            </router-link>
+                            <router-link v-if="auth.hasRole(['mesero', 'administrador'])" to="/mesero" class="bottom-nav-link flex flex-col items-center text-gray-600">
+                                <i class="ph-duotone ph-user-list text-3xl"></i><span class="text-xs font-medium">Gestionar</span>
+                            </router-link>
+                             <router-link v-if="auth.hasRole(['mesero', 'administrador'])" to="/crear-pedido" class="bottom-nav-link flex flex-col items-center text-gray-600">
+                                <i class="ph-duotone ph-notepad text-3xl"></i><span class="text-xs font-medium">Crear Pedido</span>
+                            </router-link>
+                            <router-link v-if="auth.hasRole(['cocinero', 'administrador'])" to="/cocina" class="bottom-nav-link flex flex-col items-center text-gray-600">
+                                <i class="ph-duotone ph-fire text-3xl"></i><span class="text-xs font-medium">Cocina</span>
+                            </router-link>
+                            <button @click="auth.logout()" class="bottom-nav-link flex flex-col items-center text-gray-600">
+                                <i class="ph-duotone ph-sign-out text-3xl"></i><span class="text-xs font-medium">Salir</span>
+                            </button>
+                        </template>
+                    </nav>
+                    <LoginModal />
+                </div>`,
+            setup() {
+                const auth = useAuthStore();
+                const cart = useCartStore();
+                return { auth, cart };
+            }
+        };
+
+        const routes = [
+            { 
+                path: '/', 
+                component: MainLayout,
+                children: [
+                    { path: '', component: TakeOrderView, meta: { title: 'Realizar Pedido' } },
+                    { path: 'mi-pedido', component: MyOrderView, meta: { title: 'Mi Pedido' } },
+                    { path: 'dashboard', component: DashboardView, meta: { title: 'Dashboard', requiresAuth: true, roles: ['administrador'] } },
+                    { path: 'users', component: UserManagementView, meta: { title: 'Gestión de Usuarios', requiresAuth: true, roles: ['administrador'] } },
+                    { path: 'mesero', component: WaiterView, meta: { title: 'Gestionar Pedidos', requiresAuth: true, roles: ['mesero', 'administrador'] } },
+                    { path: 'crear-pedido', component: WaiterOrderView, meta: { title: 'Crear Pedido (Staff)', requiresAuth: true, roles: ['mesero', 'administrador'] } },
+                    { path: 'cocina', component: KitchenView, meta: { title: 'Vista de Cocina', requiresAuth: true, roles: ['cocinero', 'administrador'] } },
+                    { path: 'pedidos', component: OrdersHistoryView, meta: { title: 'Historial', requiresAuth: true, roles: ['mesero', 'administrador'] } },
+                ]
+            }
+        ];
+
+        const router = createRouter({ history: createWebHashHistory(), routes });
+        
+        router.beforeEach((to, from, next) => {
+            const auth = useAuthStore();
+            if (to.meta.requiresAuth && !auth.isAuthenticated) {
+                auth.openLoginModal();
+                next('/');
+            } else if (to.meta.requiresAuth && to.meta.roles && !auth.hasRole(to.meta.roles)) {
+                if(auth.hasRole(['cocinero'])) next('/cocina');
+                else if(auth.hasRole(['mesero'])) next('/mesero');
+                else if(auth.hasRole(['administrador'])) next('/dashboard');
+                else next('/');
+            } else {
+                next();
+            }
+        });
+
+        // --- APP PRINCIPAL ---
+        const app = createApp({ template: '<router-view />' });
+        const pinia = createPinia();
+        app.use(pinia);
+        
+        const authStore = useAuthStore();
+        authStore.loadUserFromStorage();
+
+        app.use(router);
+        app.mount('#app');
+    </script>
+</body>
+</html>
