@@ -86,7 +86,6 @@
                 else if (userData.role === 'mesero') redirectPath = '/mesero';
                 else if (userData.role === 'cocinero') redirectPath = '/cocina';
                 
-                // Usar el router para navegar en lugar de recargar la página
                 router.push(redirectPath);
                 closeLoginModal();
             }
@@ -113,7 +112,6 @@
             const mesaNombre = ref('Cliente');
             const consumerOrderId = ref(localStorage.getItem('consumerOrderId') || null);
 
-            // **CORRECCIÓN**: Usar parseFloat para asegurar que el precio se trate como número.
             const subtotal = computed(() => items.value.reduce((acc, item) => acc + (parseFloat(item.precio) * item.cantidad), 0));
             const impuestos = computed(() => subtotal.value * 0.16);
             const total = computed(() => subtotal.value + impuestos.value);
@@ -271,14 +269,12 @@
                     try {
                         if (props.isWaiter) {
                             const success = await cart.submitWaiterPedido();
-                            // TODO: Reemplazar alerta con un modal de notificación
                             if (success) alert('¡Pedido enviado a cocina!');
                         } else {
                             await cart.submitPedido();
                         }
                     } catch (error) {
                         console.error("Error al enviar el pedido:", error);
-                        // TODO: Reemplazar alerta con un modal de notificación
                         alert("Hubo un problema al enviar tu pedido. Inténtalo de nuevo.");
                     } finally {
                         isSubmitting.value = false;
@@ -292,15 +288,27 @@
             props: ['product'],
             emits: ['add-to-cart'],
             template: `
-                <div @click="$emit('add-to-cart', product)" class="bg-white rounded-lg shadow-md overflow-hidden cursor-pointer hover:shadow-xl transition-shadow duration-300 transform hover:-translate-y-1">
-                    <div class="h-32 bg-gray-200 flex items-center justify-center"><i class="ph-duotone ph-hamburger text-6xl text-gray-400"></i></div>
-                    <div class="p-4">
-                        <h3 class="font-semibold text-gray-800 truncate">{{ product.nombre }}</h3>
-                        <p class="text-emerald-600 font-bold mt-1">{{ formatCurrency(product.precio) }}</p>
+                <div @click="$emit('add-to-cart', product)" class="bg-white rounded-lg shadow-md overflow-hidden cursor-pointer hover:shadow-xl transition-shadow duration-300 transform hover:-translate-y-1 flex flex-col">
+                    <div class="h-40 bg-gray-200 flex items-center justify-center relative overflow-hidden">
+                        <img v-if="product.imagen_url" :src="product.imagen_url" @error="onImageError" class="w-full h-full object-cover" :alt="'Imagen de ' + product.nombre">
+                        <i v-else class="ph-duotone ph-hamburger text-6xl text-gray-400"></i>
+                    </div>
+                    <div class="p-4 flex-1 flex flex-col justify-between">
+                        <div>
+                            <h3 class="font-semibold text-gray-800 truncate">{{ product.nombre }}</h3>
+                            <p v-if="product.descripcion" class="text-xs text-gray-500 mt-1 h-8 overflow-hidden">{{ product.descripcion }}</p>
+                        </div>
+                        <p class="text-emerald-600 font-bold mt-2">{{ formatCurrency(product.precio) }}</p>
                     </div>
                 </div>`,
-             setup() {
-                return { formatCurrency };
+            setup() {
+                const onImageError = (event) => {
+                    const placeholder = document.createElement('div');
+                    placeholder.className = 'w-full h-full flex items-center justify-center bg-gray-100';
+                    placeholder.innerHTML = '<i class="ph-duotone ph-image-broken text-5xl text-gray-400"></i>';
+                    event.target.parentNode.replaceChild(placeholder, event.target);
+                };
+                return { formatCurrency, onImageError };
             }
         };
 
@@ -334,14 +342,10 @@
                         loading.value = true;
                         const productsRes = await apiClient.get('/productos');
                         products.value = productsRes.data;
-                        const uniqueCategories = productsRes.data.reduce((acc, p) => {
-                            if (p.categoria && !acc.some(c => c.id === p.categoria.id)) acc.push(p.categoria);
-                            return acc;
-                        }, []);
-                        categories.value = uniqueCategories;
+                        const categoriesRes = await apiClient.get('/categorias');
+                        categories.value = categoriesRes.data;
                     } catch (error) {
                         console.error("Error al cargar datos:", error);
-                        // TODO: Reemplazar alerta con un modal de notificación
                         alert("No se pudo conectar con el servidor. Asegúrate de que el backend esté corriendo y los endpoints de productos sean públicos.");
                     } finally {
                         loading.value = false;
@@ -388,14 +392,10 @@
                         loading.value = true;
                         const productsRes = await apiClient.get('/productos');
                         products.value = productsRes.data;
-                        const uniqueCategories = productsRes.data.reduce((acc, p) => {
-                            if (p.categoria && !acc.some(c => c.id === p.categoria.id)) acc.push(p.categoria);
-                            return acc;
-                        }, []);
-                        categories.value = uniqueCategories;
+                        const categoriesRes = await apiClient.get('/categorias');
+                        categories.value = categoriesRes.data;
                     } catch (error) {
                         console.error("Error al cargar datos:", error);
-                        // TODO: Reemplazar alerta con un modal de notificación
                         alert("No se pudo conectar con el servidor.");
                     } finally {
                         loading.value = false;
@@ -498,7 +498,6 @@
             }
         };
         
-        // --- NUEVO COMPONENTE: Modal para Añadir Items ---
         const AddItemsModal = {
             props: ['pedidoId', 'isVisible'],
             emits: ['close', 'items-added'],
@@ -833,7 +832,6 @@
                     try {
                         loading.value = true;
                         const response = await apiClient.get('/pedidos');
-                        // Ordenar por fecha, más reciente primero
                         pedidos.value = response.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
                     } catch (error) {
                         console.error("Error cargando pedidos:", error);
@@ -956,10 +954,11 @@
                     router.push('/');
                 };
                 
-                // CORREGIDO: Llamar a fetchPedido al montar el componente si ya existe un ID.
                 onMounted(() => {
                     if (cart.consumerOrderId) {
                         fetchPedido();
+                    } else {
+                        loading.value = false;
                     }
                     socket = io(backendUrl);
                     socket.on('connect', () => console.log('Socket conectado en Mi Pedido'));
@@ -1204,13 +1203,11 @@
                         closeModal();
                     } catch (error) {
                         console.error("Error al guardar usuario:", error);
-                        // TODO: Reemplazar alerta con un modal
                         alert(error.response?.data?.message || 'No se pudo guardar el usuario.');
                     }
                 };
 
                 const confirmDelete = (user) => {
-                    // TODO: Reemplazar confirm con un modal
                     if (confirm(`¿Estás seguro de que quieres eliminar a ${user.nombre}?`)) {
                         deleteUser(user.id);
                     }
@@ -1222,7 +1219,6 @@
                         fetchUsers();
                     } catch (error) {
                         console.error("Error al eliminar usuario:", error);
-                        // TODO: Reemplazar alerta con un modal
                         alert(error.response?.data?.message || 'No se pudo eliminar el usuario.');
                     }
                 };
@@ -1234,6 +1230,238 @@
                 onMounted(fetchUsers);
 
                 return { users, loading, isModalOpen, isEditMode, currentUser, openModal, closeModal, handleSubmit, confirmDelete, isCurrentUser };
+            }
+        };
+
+        const MenuAdminView = {
+            template: `
+                <div class="space-y-8">
+                    <!-- Sección de Gestión de Categorías -->
+                    <div class="bg-white p-6 rounded-lg shadow-md">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-2xl font-bold text-gray-800">Categorías</h2>
+                            <button @click="openCategoryModal()" class="bg-emerald-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-emerald-600">
+                                <i class="ph ph-plus"></i> Añadir Categoría
+                            </button>
+                        </div>
+                        <ul class="space-y-2">
+                            <li v-for="cat in categories" :key="cat.id" class="flex justify-between items-center p-3 rounded-lg" :class="cat.visible ? 'bg-gray-50' : 'bg-red-50'">
+                                <div>
+                                    <span class="font-medium" :class="{'text-gray-400 line-through': !cat.visible}">{{ cat.nombre }}</span>
+                                    <span v-if="!cat.visible" class="text-xs text-red-600 font-semibold ml-2">OCULTO</span>
+                                </div>
+                                <div class="space-x-2">
+                                    <button @click="openCategoryModal(cat)" class="text-blue-500 hover:text-blue-700 p-1"><i class="ph ph-pencil-simple"></i></button>
+                                    <button v-if="cat.visible" @click="toggleVisibility('category', cat)" class="text-red-500 hover:text-red-700 p-1" title="Ocultar"><i class="ph ph-eye-slash"></i></button>
+                                    <button v-else @click="toggleVisibility('category', cat)" class="text-green-500 hover:text-green-700 p-1" title="Restaurar"><i class="ph ph-eye"></i></button>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Sección de Gestión de Productos -->
+                    <div class="bg-white p-6 rounded-lg shadow-md">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-2xl font-bold text-gray-800">Productos</h2>
+                            <button @click="openProductModal()" class="bg-emerald-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-emerald-600">
+                                <i class="ph ph-plus"></i> Añadir Producto
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="p-3 text-sm font-semibold text-gray-600">Producto</th>
+                                        <th class="p-3 text-sm font-semibold text-gray-600">Categoría</th>
+                                        <th class="p-3 text-sm font-semibold text-gray-600">Precio</th>
+                                        <th class="p-3 text-sm font-semibold text-gray-600">Estado</th>
+                                        <th class="p-3 text-sm font-semibold text-gray-600 text-right">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-200">
+                                    <tr v-for="prod in products" :key="prod.id" class="hover:bg-gray-50" :class="{'opacity-50': !prod.visible}">
+                                        <td class="p-3 font-medium flex items-center gap-3">
+                                            <img :src="prod.imagen_url || 'https://placehold.co/40x40/e2e8f0/64748b?text=??'" class="w-10 h-10 rounded-md object-cover">
+                                            <span>{{ prod.nombre }}</span>
+                                        </td>
+                                        <td class="p-3 text-sm text-gray-500">{{ prod.categoria ? prod.categoria.nombre : 'N/A' }}</td>
+                                        <td class="p-3 text-sm text-gray-800 font-semibold">{{ formatCurrency(prod.precio) }}</td>
+                                        <td class="p-3 text-sm">
+                                            <span class="px-2 py-1 rounded-full text-xs font-medium" :class="prod.visible ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'">
+                                                {{ prod.visible ? 'Visible' : 'Oculto' }}
+                                            </span>
+                                        </td>
+                                        <td class="p-3 text-right">
+                                            <button @click="openProductModal(prod)" class="text-blue-500 hover:text-blue-700 p-1"><i class="ph ph-pencil-simple"></i></button>
+                                            <button v-if="prod.visible" @click="toggleVisibility('product', prod)" class="text-red-500 hover:text-red-700 p-1" title="Ocultar"><i class="ph ph-eye-slash"></i></button>
+                                            <button v-else @click="toggleVisibility('product', prod)" class="text-green-500 hover:text-green-700 p-1" title="Restaurar"><i class="ph ph-eye"></i></button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Modal para Categorías -->
+                    <div v-if="categoryModal.isOpen" @click.self="closeCategoryModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div class="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
+                            <h3 class="text-2xl font-bold mb-6">{{ categoryModal.isEdit ? 'Editar' : 'Nueva' }} Categoría</h3>
+                            <form @submit.prevent="handleCategorySubmit">
+                                <div class="mb-4">
+                                    <label for="cat-nombre" class="block text-sm font-medium text-gray-700">Nombre</label>
+                                    <input v-model="categoryModal.current.nombre" id="cat-nombre" type="text" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm" required>
+                                </div>
+                                <div class="flex justify-end gap-4 mt-8">
+                                    <button type="button" @click="closeCategoryModal" class="px-4 py-2 bg-gray-200 rounded-lg">Cancelar</button>
+                                    <button type="submit" class="px-4 py-2 bg-emerald-500 text-white rounded-lg">Guardar</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Modal para Productos -->
+                    <div v-if="productModal.isOpen" @click.self="closeProductModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                        <div class="bg-white rounded-lg shadow-xl p-8 w-full max-w-lg">
+                            <h3 class="text-2xl font-bold mb-6">{{ productModal.isEdit ? 'Editar' : 'Nuevo' }} Producto</h3>
+                            <form @submit.prevent="handleProductSubmit" class="space-y-4">
+                                <input v-model="productModal.current.nombre" type="text" placeholder="Nombre del producto" class="w-full border-gray-300 rounded-md shadow-sm" required>
+                                <textarea v-model="productModal.current.descripcion" placeholder="Descripción" class="w-full border-gray-300 rounded-md shadow-sm" rows="3"></textarea>
+                                <input v-model="productModal.current.precio" type="number" step="0.01" placeholder="Precio" class="w-full border-gray-300 rounded-md shadow-sm" required>
+                                <select v-model="productModal.current.categoriaId" class="w-full border-gray-300 rounded-md shadow-sm" required>
+                                    <option :value="null" disabled>Selecciona una categoría</option>
+                                    <option v-for="cat in categories.filter(c => c.visible)" :key="cat.id" :value="cat.id">{{ cat.nombre }}</option>
+                                </select>
+                                <div>
+                                    <label for="prod-imagen" class="block text-sm font-medium text-gray-700">Imagen del Producto</label>
+                                    <input @change="handleImageUpload" id="prod-imagen" type="file" accept="image/*" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100">
+                                    <div v-if="imagePreviewUrl || productModal.current.imagen_url" class="mt-4 border rounded-md p-2 inline-block">
+                                        <img :src="imagePreviewUrl || productModal.current.imagen_url" class="w-32 h-32 object-cover rounded-md">
+                                    </div>
+                                </div>
+                                <div class="flex justify-end gap-4 pt-4">
+                                    <button type="button" @click="closeProductModal" class="px-4 py-2 bg-gray-200 rounded-lg">Cancelar</button>
+                                    <button type="submit" class="px-4 py-2 bg-emerald-500 text-white rounded-lg">Guardar</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            `,
+            setup() {
+                const products = ref([]);
+                const categories = ref([]);
+                const loading = ref(true);
+
+                const categoryModal = ref({ isOpen: false, isEdit: false, current: {} });
+                const productModal = ref({ isOpen: false, isEdit: false, current: {} });
+                const imagePreviewUrl = ref(null);
+                const selectedFile = ref(null);
+
+                const fetchData = async () => {
+                    loading.value = true;
+                    try {
+                        const [prodRes, catRes] = await Promise.all([
+                            apiClient.get('/productos/admin/all'),
+                            apiClient.get('/categorias/admin/all')
+                        ]);
+                        products.value = prodRes.data;
+                        categories.value = catRes.data;
+                    } catch (error) {
+                        console.error("Error al cargar datos de menú:", error);
+                        alert("No se pudieron cargar los datos del menú.");
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+                const handleImageUpload = (event) => {
+                    const file = event.target.files[0];
+                    if (file) {
+                        selectedFile.value = file;
+                        imagePreviewUrl.value = URL.createObjectURL(file);
+                    }
+                };
+
+                // --- Lógica de Categorías ---
+                const openCategoryModal = (cat = null) => {
+                    if (cat) {
+                        categoryModal.value = { isOpen: true, isEdit: true, current: { ...cat } };
+                    } else {
+                        categoryModal.value = { isOpen: true, isEdit: false, current: { nombre: '' } };
+                    }
+                };
+                const closeCategoryModal = () => categoryModal.value.isOpen = false;
+                const handleCategorySubmit = async () => {
+                    const { isEdit, current } = categoryModal.value;
+                    try {
+                        if (isEdit) {
+                            await apiClient.put(`/categorias/${current.id}`, current);
+                        } else {
+                            await apiClient.post('/categorias', current);
+                        }
+                        await fetchData();
+                        closeCategoryModal();
+                    } catch (error) {
+                        alert(error.response?.data?.message || 'Error al guardar la categoría.');
+                    }
+                };
+
+                // --- Lógica de Productos ---
+                const openProductModal = (prod = null) => {
+                    imagePreviewUrl.value = null;
+                    selectedFile.value = null;
+                    if (prod) {
+                        productModal.value = { isOpen: true, isEdit: true, current: { ...prod } };
+                    } else {
+                        productModal.value = { isOpen: true, isEdit: false, current: { nombre: '', descripcion: '', precio: '', imagen_url: '', categoriaId: null } };
+                    }
+                };
+                const closeProductModal = () => productModal.value.isOpen = false;
+                const handleProductSubmit = async () => {
+                    const { isEdit, current } = productModal.value;
+                    
+                    const formData = new FormData();
+                    formData.append('nombre', current.nombre);
+                    formData.append('descripcion', current.descripcion || '');
+                    formData.append('precio', current.precio);
+                    formData.append('categoriaId', current.categoriaId);
+
+                    if (selectedFile.value) {
+                        formData.append('imagen', selectedFile.value);
+                    }
+
+                    try {
+                        const config = { headers: { 'Content-Type': 'multipart/form-data' } };
+                        if (isEdit) {
+                            await apiClient.put(`/productos/admin/${current.id}`, formData, config);
+                        } else {
+                            await apiClient.post('/productos/admin', formData, config);
+                        }
+                        await fetchData();
+                        closeProductModal();
+                    } catch (error) {
+                        alert(error.response?.data?.message || 'Error al guardar el producto.');
+                    }
+                };
+
+                const toggleVisibility = async (type, item) => {
+                    const endpoint = type === 'category' ? `/categorias/${item.id}` : `/productos/${item.id}`;
+                    
+                    try {
+                        if (item.visible) {
+                            await apiClient.delete(endpoint);
+                        } else {
+                            await apiClient.patch(`${endpoint}/restore`);
+                        }
+                        await fetchData();
+                    } catch (error) {
+                        alert(error.response?.data?.message || `Error al cambiar la visibilidad.`);
+                    }
+                };
+
+                onMounted(fetchData);
+
+                return { products, categories, loading, categoryModal, productModal, imagePreviewUrl, handleImageUpload, openCategoryModal, closeCategoryModal, handleCategorySubmit, openProductModal, closeProductModal, handleProductSubmit, toggleVisibility, formatCurrency };
             }
         };
 
@@ -1270,6 +1498,9 @@
                              <router-link v-if="auth.hasRole(['administrador'])" to="/dashboard" class="bottom-nav-link flex flex-col items-center text-gray-600">
                                 <i class="ph-duotone ph-gauge text-3xl"></i><span class="text-xs font-medium">Dashboard</span>
                             </router-link>
+                             <router-link v-if="auth.hasRole(['administrador'])" to="/menu-admin" class="bottom-nav-link flex flex-col items-center text-gray-600">
+                                <i class="ph-duotone ph-list-dashes text-3xl"></i><span class="text-xs font-medium">Menú</span>
+                            </router-link>
                              <router-link v-if="auth.hasRole(['administrador'])" to="/users" class="bottom-nav-link flex flex-col items-center text-gray-600">
                                 <i class="ph-duotone ph-users-three text-3xl"></i><span class="text-xs font-medium">Usuarios</span>
                             </router-link>
@@ -1305,6 +1536,7 @@
                     { path: 'mi-pedido', component: MyOrderView, meta: { title: 'Mi Pedido' } },
                     { path: 'dashboard', component: DashboardView, meta: { title: 'Dashboard', requiresAuth: true, roles: ['administrador'] } },
                     { path: 'users', component: UserManagementView, meta: { title: 'Gestión de Usuarios', requiresAuth: true, roles: ['administrador'] } },
+                    { path: 'menu-admin', component: MenuAdminView, meta: { title: 'Gestión de Menú', requiresAuth: true, roles: ['administrador'] } },
                     { path: 'mesero', component: WaiterView, meta: { title: 'Gestionar Pedidos', requiresAuth: true, roles: ['mesero', 'administrador'] } },
                     { path: 'crear-pedido', component: WaiterOrderView, meta: { title: 'Crear Pedido (Staff)', requiresAuth: true, roles: ['mesero', 'administrador'] } },
                     { path: 'cocina', component: KitchenView, meta: { title: 'Vista de Cocina', requiresAuth: true, roles: ['cocinero', 'administrador'] } },
@@ -1317,7 +1549,6 @@
         
         router.beforeEach((to, from, next) => {
             const auth = useAuthStore();
-            // Cargar el usuario desde localStorage en cada navegación para asegurar la persistencia
             const token = localStorage.getItem('token');
             const user = JSON.parse(localStorage.getItem('user'));
             
@@ -1328,16 +1559,13 @@
 
             if (to.meta.requiresAuth && !auth.isAuthenticated) {
                 auth.openLoginModal();
-                if (from.path === '/') {
-                    return; // Evita bucle de redirección si ya estamos en la página de inicio
-                }
+                if (from.path === '/') return;
                 next('/');
             } else if (to.meta.requiresAuth && to.meta.roles && !auth.hasRole(to.meta.roles)) {
-                // Redirigir al dashboard correspondiente si el rol no coincide
                 if(auth.hasRole(['cocinero'])) next('/cocina');
                 else if(auth.hasRole(['mesero'])) next('/mesero');
                 else if(auth.hasRole(['administrador'])) next('/dashboard');
-                else next('/'); // Fallback a la página principal
+                else next('/');
             } else {
                 next();
             }

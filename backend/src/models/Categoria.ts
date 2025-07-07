@@ -5,6 +5,7 @@ import sequelize from '../config/database';
 class Categoria extends Model<InferAttributes<Categoria>, InferCreationAttributes<Categoria>> {
   declare id: CreationOptional<number>;
   declare nombre: string;
+  declare visible: boolean; // NUEVO CAMPO
 }
 
 Categoria.init(
@@ -15,15 +16,21 @@ Categoria.init(
       primaryKey: true,
     },
     nombre: {
-      type: new DataTypes.STRING(128),
+      type: new DataTypes.STRING(64),
       allowNull: false,
       unique: true,
     },
+    // NUEVO CAMPO para borrado lógico (soft delete)
+    visible: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true,
+        allowNull: false,
+    }
   },
   {
     tableName: 'categorias',
-    sequelize, // Pasamos la instancia de conexión
-    timestamps: false, // No queremos createdAt/updatedAt en esta tabla
+    sequelize,
+    timestamps: false,
   }
 );
 

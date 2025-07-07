@@ -1,16 +1,18 @@
 // src/controllers/productoController.ts
 import { Request, Response } from 'express';
 import { Producto, Categoria } from '../models';
-import { Model } from 'sequelize';
+import { Op } from 'sequelize';
 
-// Obtener todos los productos, incluyendo su categoría
+// Obtener solo productos visibles (para el público)
 export const getAllProductos = async (req: Request, res: Response) => {
   try {
     const productos = await Producto.findAll({
+      where: { visible: true },
       include: {
         model: Categoria,
-        as: 'categoria', // Este alias debe coincidir con el definido en la asociación
-        attributes: ['id', 'nombre'], // Solo trae estos atributos de la categoría
+        as: 'categoria',
+        where: { visible: true },
+        required: true
       },
     });
     res.json(productos);
@@ -19,38 +21,32 @@ export const getAllProductos = async (req: Request, res: Response) => {
   }
 };
 
-// Obtener un producto por su ID
-export const getProductoById = async (req: Request, res: Response) => {
-    try {
-        const { id } = req.params;
-        const producto = await Producto.findByPk(id, {
-            include: {
-                model: Categoria,
-                as: 'categoria',
-            }
-        });
-
-        if (producto) {
-            res.json(producto);
-        } else {
-            res.status(404).json({ message: 'Producto no encontrado' });
-        }
-    } catch (error) {
-        res.status(500).json({ message: 'Error al obtener el producto', error });
-    }
+// Obtener TODOS los productos (para el admin)
+export const adminGetAllProductos = async (req: Request, res: Response) => {
+  try {
+    const productos = await Producto.findAll({
+      include: {
+        model: Categoria,
+        as: 'categoria',
+        attributes: ['id', 'nombre', 'visible']
+      },
+      order: [['nombre', 'ASC']]
+    });
+    res.json(productos);
+  } catch (error) {
+    res.status(500).json({ message: 'Error al obtener los productos para el admin', error });
+  }
 };
 
 // Crear un nuevo producto
 export const createProducto = async (req: Request, res: Response) => {
   try {
-    const { nombre, descripcion, precio, categoriaId } = req.body;
-    
-    // Validación básica
+    const { nombre, precio, categoriaId } = req.body;
     if (!nombre || !precio || !categoriaId) {
       return res.status(400).json({ message: 'Nombre, precio y categoriaId son requeridos' });
     }
-
-    const nuevoProducto = await Producto.create(req.body);
+    let imagen_url = req.file ? `${req.protocol}://${req.get('host')}/public/uploads/${req.file.filename}` : null;
+    const nuevoProducto = await Producto.create({ ...req.body, imagen_url });
     res.status(201).json(nuevoProducto);
   } catch (error) {
     res.status(500).json({ message: 'Error al crear el producto', error });
@@ -62,33 +58,48 @@ export const updateProducto = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
         const producto = await Producto.findByPk(id);
-
         if (!producto) {
             return res.status(404).json({ message: 'Producto no encontrado' });
         }
-
-        await producto.update(req.body);
+        const updateData = { ...req.body };
+        if (req.file) {
+            updateData.imagen_url = `${req.protocol}://${req.get('host')}/public/uploads/${req.file.filename}`;
+        }
+        await producto.update(updateData);
         res.json(producto);
-
     } catch (error) {
         res.status(500).json({ message: 'Error al actualizar el producto', error });
     }
 };
 
-// Eliminar un producto
+// Borrado lógico (ocultar)
 export const deleteProducto = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
         const producto = await Producto.findByPk(id);
-
         if (!producto) {
             return res.status(404).json({ message: 'Producto no encontrado' });
         }
-
-        await producto.destroy();
-        res.json({ message: 'Producto eliminado correctamente' });
-
+        producto.visible = true;
+        await producto.save();
+        res.json({ message: 'Producto ocultado correctamente' });
     } catch (error) {
-        res.status(500).json({ message: 'Error al eliminar el producto', error });
+        res.status(500).json({ message: 'Error al ocultar el producto', error });
+    }
+};
+
+// Restaurar un producto (hacer visible)
+export const restoreProducto = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const producto = await Producto.findByPk(id);
+        if (!producto) {
+            return res.status(404).json({ message: 'Producto no encontrado' });
+        }
+        producto.visible = true;
+        await producto.save();
+        res.json({ message: 'Producto restaurado correctamente' });
+    } catch (error) {
+        res.status(500).json({ message: 'Error al restaurar el producto', error });
     }
 };

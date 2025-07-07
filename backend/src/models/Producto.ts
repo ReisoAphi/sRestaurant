@@ -9,6 +9,7 @@ class Producto extends Model<InferAttributes<Producto>, InferCreationAttributes<
   declare descripcion: string | null;
   declare precio: number;
   declare imagen_url: string | null;
+  declare visible: boolean; // NUEVO CAMPO
   declare categoriaId: ForeignKey<Categoria['id']>;
 }
 
@@ -35,7 +36,12 @@ Producto.init(
       type: new DataTypes.STRING(255),
       allowNull: true,
     },
-    // No definimos 'categoriaId' aquí directamente, Sequelize lo hará por la asociación.
+    // NUEVO CAMPO para borrado lógico (soft delete)
+    visible: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true,
+        allowNull: false,
+    }
   },
   {
     tableName: 'productos',

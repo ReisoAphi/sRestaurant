@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import path from 'path'; // Asegúrate de importar 'path'
 
 import { testConnection } from './config/database';
 import { syncDatabase } from './models';
@@ -35,6 +36,11 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
+
+// **NUEVO**: Servir archivos estáticos desde la carpeta 'public'
+// Esto hará que las imágenes en 'public/uploads' sean accesibles desde la web
+app.use('/public', express.static(path.join(__dirname, '..', 'public')));
+
 
 // --- RUTAS DE LA API ---
 app.use('/api/auth', authRoutes);

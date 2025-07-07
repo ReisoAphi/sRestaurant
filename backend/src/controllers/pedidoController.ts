@@ -49,7 +49,7 @@ export const createPedido = async (req: Request, res: Response) => {
         await DetallePedido.bulkCreate(detallesConPedidoId, { transaction: t });
         await t.commit();
         const pedidoCompleto = await Pedido.findByPk(nuevoPedido.id, {
-            include: [{ model: DetallePedido, as: 'detalles', include: [{ model: Producto, as: 'producto', attributes: ['nombre'] }] }]
+            include: [{ model: DetallePedido, as: 'detalles', include: [{ model: Producto, as: 'producto', attributes: ['nombre', 'precio'] }] }]
         });
         io.emit('nuevo_pedido', pedidoCompleto);
         res.status(201).json(pedidoCompleto);
@@ -60,7 +60,7 @@ export const createPedido = async (req: Request, res: Response) => {
     }
 };
 
-// **NUEVA FUNCIÓN**: Añadir productos a un pedido existente
+// Añadir productos a un pedido existente
 export const addItemsToPedido = async (req: Request, res: Response) => {
     const { id } = req.params;
     const t = await sequelize.transaction();
@@ -102,18 +102,15 @@ export const addItemsToPedido = async (req: Request, res: Response) => {
             });
         }
 
-        // Añadir los nuevos detalles del pedido
         await DetallePedido.bulkCreate(detallesParaCrear, { transaction: t });
 
-        // Actualizar el total del pedido
         pedido.total = parseFloat(pedido.total.toString()) + totalAdicional;
         await pedido.save({ transaction: t });
 
         await t.commit();
 
-        // Devolver el pedido completo y actualizado
         const pedidoCompleto = await Pedido.findByPk(id, {
-            include: [{ model: DetallePedido, as: 'detalles', include: [{ model: Producto, as: 'producto', attributes: ['nombre'] }] }]
+            include: [{ model: DetallePedido, as: 'detalles', include: [{ model: Producto, as: 'producto', attributes: ['nombre', 'precio'] }] }]
         });
 
         io.emit('pedido_actualizado', pedidoCompleto);
@@ -126,8 +123,7 @@ export const addItemsToPedido = async (req: Request, res: Response) => {
     }
 };
 
-
-// Actualizar el estado del pedido (validar, preparar, entregar, cancelar)
+// Actualizar el estado del pedido
 export const updateEstadoPedido = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
@@ -143,7 +139,7 @@ export const updateEstadoPedido = async (req: Request, res: Response) => {
         pedido.estado = estado;
         await pedido.save();
         const pedidoActualizado = await Pedido.findByPk(id, {
-             include: [{ model: DetallePedido, as: 'detalles', include: [{ model: Producto, as: 'producto', attributes: ['nombre'] }] }]
+             include: [{ model: DetallePedido, as: 'detalles', include: [{ model: Producto, as: 'producto', attributes: ['nombre', 'precio'] }] }]
         });
         io.emit('pedido_actualizado', pedidoActualizado);
         res.json(pedidoActualizado);
@@ -163,7 +159,7 @@ export const marcarComoPagado = async (req: Request, res: Response) => {
         pedido.pagado = true;
         await pedido.save();
         const pedidoActualizado = await Pedido.findByPk(id, {
-             include: [{ model: DetallePedido, as: 'detalles', include: [{ model: Producto, as: 'producto', attributes: ['nombre'] }] }]
+             include: [{ model: DetallePedido, as: 'detalles', include: [{ model: Producto, as: 'producto', attributes: ['nombre', 'precio'] }] }]
         });
         io.emit('pedido_actualizado', pedidoActualizado);
         res.json(pedidoActualizado);
@@ -172,7 +168,7 @@ export const marcarComoPagado = async (req: Request, res: Response) => {
     }
 };
 
-// Obtener todos los pedidos con sus detalles
+// **CORREGIDO**: Obtener todos los pedidos con sus detalles
 export const getAllPedidos = async (req: Request, res: Response) => {
     try {
         const pedidos = await Pedido.findAll({
@@ -182,7 +178,7 @@ export const getAllPedidos = async (req: Request, res: Response) => {
                 include: [{
                     model: Producto,
                     as: 'producto',
-                    attributes: ['nombre']
+                    attributes: ['nombre', 'precio']
                 }]
             }],
             order: [['createdAt', 'DESC']]
@@ -194,7 +190,7 @@ export const getAllPedidos = async (req: Request, res: Response) => {
     }
 };
 
-// Obtener un pedido por ID con sus detalles
+// **CORREGIDO**: Obtener un pedido por ID con sus detalles
 export const getPedidoById = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
@@ -205,7 +201,7 @@ export const getPedidoById = async (req: Request, res: Response) => {
                 include: [{
                     model: Producto,
                     as: 'producto',
-                    attributes: ['nombre']
+                    attributes: ['nombre', 'precio']
                 }]
             }]
         });
