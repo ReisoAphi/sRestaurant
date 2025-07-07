@@ -498,7 +498,147 @@
             }
         };
         
+        // --- NUEVO COMPONENTE: Modal para Añadir Items ---
+        const AddItemsModal = {
+            props: ['pedidoId', 'isVisible'],
+            emits: ['close', 'items-added'],
+            components: { ProductCard },
+            template: `
+                <div v-if="isVisible" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+                    <div class="w-full max-w-4xl h-[90vh] bg-white rounded-lg shadow-xl flex flex-col">
+                        <header class="p-4 border-b flex justify-between items-center">
+                            <h2 class="text-2xl font-bold text-gray-800">Añadir a Pedido #{{ pedidoId }}</h2>
+                            <button @click="$emit('close')" class="text-gray-400 hover:text-gray-600">
+                                <i class="ph ph-x text-3xl"></i>
+                            </button>
+                        </header>
+                        
+                        <div class="flex-1 flex flex-col md:flex-row gap-6 p-4 overflow-hidden">
+                            <!-- Columna de Productos -->
+                            <div class="w-full md:w-2/3 flex flex-col">
+                                <div class="mb-4"><input type="text" v-model="searchTerm" placeholder="Buscar producto..." class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+                                <div class="flex flex-wrap gap-2 mb-4">
+                                    <button @click="selectedCategory = null" :class="{'bg-emerald-500 text-white': selectedCategory === null, 'bg-white text-gray-700': selectedCategory !== null}" class="px-4 py-2 rounded-full shadow-sm text-sm font-medium hover:bg-emerald-100 transition-colors">Todos</button>
+                                    <button v-for="category in categories" :key="category.id" @click="selectedCategory = category.id" :class="{'bg-emerald-500 text-white': selectedCategory === category.id, 'bg-white text-gray-700': selectedCategory !== category.id}" class="px-4 py-2 rounded-full shadow-sm text-sm font-medium hover:bg-emerald-100 transition-colors">{{ category.nombre }}</button>
+                                </div>
+                                <div v-if="loading" class="flex-1 flex items-center justify-center"><i class="ph-duotone ph-spinner-gap animate-spin text-5xl text-emerald-500"></i></div>
+                                <div v-else-if="filteredProducts.length === 0" class="flex-1 flex items-center justify-center"><p>No se encontraron productos.</p></div>
+                                <div v-else class="flex-1 overflow-y-auto pr-2 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                                    <ProductCard v-for="product in filteredProducts" :key="product.id" :product="product" @add-to-cart="addItem"/>
+                                </div>
+                            </div>
+
+                            <!-- Columna de Carrito de Adición -->
+                            <div class="w-full md:w-1/3 bg-gray-50 rounded-lg p-4 flex flex-col">
+                                <h3 class="text-xl font-bold text-gray-800 border-b pb-3 mb-3">Nuevos Items</h3>
+                                <div class="flex-1 overflow-y-auto">
+                                    <div v-if="newItems.length === 0" class="text-center text-gray-500 py-10">
+                                        <p>Añade productos del menú.</p>
+                                    </div>
+                                    <ul v-else class="divide-y divide-gray-200">
+                                        <li v-for="item in newItems" :key="item.id" class="py-2 flex items-center">
+                                            <div class="flex-1">
+                                                <p class="font-semibold text-gray-800">{{ item.nombre }}</p>
+                                                <p class="text-sm text-gray-500">{{ formatCurrency(item.precio) }}</p>
+                                            </div>
+                                            <div class="flex items-center">
+                                                <input type="number" min="1" :value="item.cantidad" @change="updateQuantity(item.id, $event.target.value)" class="w-16 text-center border-gray-300 rounded-md">
+                                                <button @click="removeItem(item.id)" class="ml-2 text-red-500 hover:text-red-700"><i class="ph ph-trash"></i></button>
+                                            </div>
+                                        </li>
+                                    </ul>
+                                </div>
+                                <div class="border-t pt-4 mt-4">
+                                    <button @click="confirmAddItems" class="w-full py-3 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50" :disabled="newItems.length === 0 || isSubmitting">
+                                        <span v-if="isSubmitting">Añadiendo...</span>
+                                        <span v-else>Confirmar Adición</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>`,
+            setup(props, { emit }) {
+                const products = ref([]);
+                const categories = ref([]);
+                const loading = ref(true);
+                const searchTerm = ref('');
+                const selectedCategory = ref(null);
+                const newItems = ref([]);
+                const isSubmitting = ref(false);
+
+                const fetchProductsAndCategories = async () => {
+                    try {
+                        loading.value = true;
+                        const productsRes = await apiClient.get('/productos');
+                        products.value = productsRes.data;
+                        const uniqueCategories = productsRes.data.reduce((acc, p) => {
+                            if (p.categoria && !acc.some(c => c.id === p.categoria.id)) acc.push(p.categoria);
+                            return acc;
+                        }, []);
+                        categories.value = uniqueCategories;
+                    } catch (error) {
+                        console.error("Error al cargar datos del menú:", error);
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+                const filteredProducts = computed(() => {
+                    let filtered = products.value;
+                    if (selectedCategory.value) filtered = filtered.filter(p => p.categoriaId === selectedCategory.value);
+                    if (searchTerm.value) filtered = filtered.filter(p => p.nombre.toLowerCase().includes(searchTerm.value.toLowerCase()));
+                    return filtered;
+                });
+
+                const addItem = (producto) => {
+                    const existingItem = newItems.value.find(item => item.id === producto.id);
+                    if (existingItem) existingItem.cantidad++;
+                    else newItems.value.push({ ...producto, cantidad: 1 });
+                };
+                const removeItem = (productoId) => {
+                    newItems.value = newItems.value.filter(item => item.id !== productoId);
+                };
+                const updateQuantity = (productoId, cantidad) => {
+                    const item = newItems.value.find(i => i.id === productoId);
+                    if (item) (cantidad > 0) ? item.cantidad = parseInt(cantidad) : removeItem(productoId);
+                };
+                
+                const confirmAddItems = async () => {
+                    if (isSubmitting.value || newItems.value.length === 0) return;
+                    isSubmitting.value = true;
+                    try {
+                        const payload = {
+                            detalles: newItems.value.map(item => ({ productoId: item.id, cantidad: item.cantidad }))
+                        };
+                        await apiClient.post(`/pedidos/${props.pedidoId}/add-items`, payload);
+                        emit('items-added');
+                        emit('close');
+                    } catch (error) {
+                        console.error("Error al añadir items:", error);
+                        alert(error.response?.data?.message || 'No se pudieron añadir los productos.');
+                    } finally {
+                        isSubmitting.value = false;
+                    }
+                };
+
+                watch(() => props.isVisible, (newValue) => {
+                    if (newValue) {
+                        newItems.value = [];
+                        searchTerm.value = '';
+                        selectedCategory.value = null;
+                        if (products.value.length === 0) {
+                            fetchProductsAndCategories();
+                        }
+                    }
+                });
+
+                return { loading, categories, searchTerm, selectedCategory, filteredProducts, newItems, isSubmitting, addItem, removeItem, updateQuantity, confirmAddItems, formatCurrency };
+            }
+        };
+
         const WaiterView = {
+            components: { AddItemsModal },
             template: `
                 <div class="p-2 relative">
                     <!-- Contenedor de Pedidos -->
@@ -518,7 +658,6 @@
                                 <li v-for="detalle in pedido.detalles" :key="detalle.id" class="flex justify-between items-center"><span class="text-gray-700">{{ detalle.producto.nombre }}</span><span class="font-bold text-emerald-600">x {{ detalle.cantidad }}</span></li>
                             </ul>
                             
-                            <!-- **MEJORA**: Mostrar total a cobrar si no está pagado -->
                             <div v-if="!pedido.pagado" class="border-t border-gray-200 pt-3 mt-3">
                                 <div class="flex justify-between items-center text-lg font-bold text-gray-800">
                                     <span>Total a Cobrar:</span>
@@ -527,11 +666,13 @@
                             </div>
 
                             <div class="mt-4 space-y-2">
-                                <!-- Botones de acción principal -->
+                                <button v-if="!pedido.pagado" @click="openAddItemsModal(pedido)" class="w-full bg-gray-500 text-white font-bold py-2 rounded-lg hover:bg-gray-600 flex items-center justify-center gap-2">
+                                    <i class="ph ph-plus-circle"></i>
+                                    <span>Añadir Items</span>
+                                </button>
                                 <button v-if="pedido.estado === 'en validacion'" @click="openConfirmationModal(pedido, 'en preparacion')" class="w-full bg-blue-500 text-white font-bold py-2 rounded-lg hover:bg-blue-600">Validar Pedido</button>
                                 <button v-if="pedido.estado === 'listo para entregar'" @click="openConfirmationModal(pedido, 'entregado')" class="w-full bg-purple-500 text-white font-bold py-2 rounded-lg hover:bg-purple-600">Marcar como Entregado</button>
                                 
-                                <!-- Botones de pago y cancelación -->
                                 <div class="flex gap-2">
                                     <button @click="openConfirmationModal(pedido, 'pagar')" class="w-full bg-emerald-500 text-white font-bold py-2 rounded-lg hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="pedido.pagado">
                                         <span v-if="!pedido.pagado">Pagar</span>
@@ -543,7 +684,6 @@
                         </div>
                     </transition-group>
 
-                    <!-- Modal de Confirmación -->
                     <div v-if="confirmation.isOpen" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
                         <div class="w-full max-w-sm bg-white rounded-lg shadow-xl p-6 text-center">
                             <i :class="confirmation.icon" class="text-5xl mb-4"></i>
@@ -555,6 +695,13 @@
                             </div>
                         </div>
                     </div>
+                    
+                    <AddItemsModal 
+                        :is-visible="addItemsModal.isOpen" 
+                        :pedido-id="addItemsModal.pedidoId"
+                        @close="closeAddItemsModal"
+                        @items-added="fetchPedidos"
+                    />
                 </div>`,
             setup() {
                 const pedidos = ref([]);
@@ -563,14 +710,8 @@
                 let timerIntervalId = null;
                 let socket;
 
-                // --- Estado del Modal de Confirmación ---
-                const confirmation = ref({
-                    isOpen: false,
-                    message: '',
-                    icon: '',
-                    confirmButtonClass: '',
-                    onConfirm: () => {}
-                });
+                const confirmation = ref({ isOpen: false, message: '', icon: '', confirmButtonClass: '', onConfirm: () => {} });
+                const addItemsModal = ref({ isOpen: false, pedidoId: null });
 
                 const fetchPedidos = async () => {
                     try {
@@ -595,63 +736,34 @@
                 const updateOrderStatus = async (pedidoId, nuevoEstado) => {
                     try { 
                         await apiClient.patch(`/pedidos/${pedidoId}/estado`, { estado: nuevoEstado });
-                    } catch (error) {
-                        console.error("Error al actualizar estado:", error);
-                    }
+                    } catch (error) { console.error("Error al actualizar estado:", error); }
                 };
 
                 const markAsPaid = async (pedidoId) => {
                     try {
                         await apiClient.patch(`/pedidos/${pedidoId}/pagar`);
-                    } catch(error) {
-                        console.error("Error al marcar como pagado:", error);
-                    }
+                    } catch(error) { console.error("Error al marcar como pagado:", error); }
                 };
                 
-                // --- Lógica del Modal ---
                 const openConfirmationModal = (pedido, action) => {
                     const details = {
-                        'en preparacion': {
-                            message: `¿Confirmas validar el pedido #${pedido.id} y enviarlo a cocina?`,
-                            icon: 'ph-duotone ph-question text-blue-500',
-                            confirmButtonClass: 'bg-blue-500 hover:bg-blue-600',
-                            onConfirm: () => updateOrderStatus(pedido.id, 'en preparacion')
-                        },
-                        'entregado': {
-                            message: `¿Confirmas que el pedido #${pedido.id} ha sido entregado al cliente?`,
-                            icon: 'ph-duotone ph-smiley text-purple-500',
-                            confirmButtonClass: 'bg-purple-500 hover:bg-purple-600',
-                            onConfirm: () => updateOrderStatus(pedido.id, 'entregado')
-                        },
-                        'pagar': {
-                            message: `¿Confirmas el pago de ${formatCurrency(pedido.total)} para el pedido #${pedido.id}?`,
-                            icon: 'ph-duotone ph-money text-emerald-500',
-                            confirmButtonClass: 'bg-emerald-500 hover:bg-emerald-600',
-                            onConfirm: () => markAsPaid(pedido.id)
-                        },
-                        'cancelar': {
-                            message: `¿Estás seguro de que quieres CANCELAR el pedido #${pedido.id}? Esta acción no se puede deshacer.`,
-                            icon: 'ph-duotone ph-warning-circle text-red-500',
-                            confirmButtonClass: 'bg-red-500 hover:bg-red-600',
-                            onConfirm: () => updateOrderStatus(pedido.id, 'cancelado')
-                        }
+                        'en preparacion': { message: `¿Confirmas validar el pedido #${pedido.id} y enviarlo a cocina?`, icon: 'ph-duotone ph-question text-blue-500', confirmButtonClass: 'bg-blue-500 hover:bg-blue-600', onConfirm: () => updateOrderStatus(pedido.id, 'en preparacion') },
+                        'entregado': { message: `¿Confirmas que el pedido #${pedido.id} ha sido entregado al cliente?`, icon: 'ph-duotone ph-smiley text-purple-500', confirmButtonClass: 'bg-purple-500 hover:bg-purple-600', onConfirm: () => updateOrderStatus(pedido.id, 'entregado') },
+                        'pagar': { message: `¿Confirmas el pago de ${formatCurrency(pedido.total)} para el pedido #${pedido.id}?`, icon: 'ph-duotone ph-money text-emerald-500', confirmButtonClass: 'bg-emerald-500 hover:bg-emerald-600', onConfirm: () => markAsPaid(pedido.id) },
+                        'cancelar': { message: `¿Estás seguro de que quieres CANCELAR el pedido #${pedido.id}?`, icon: 'ph-duotone ph-warning-circle text-red-500', confirmButtonClass: 'bg-red-500 hover:bg-red-600', onConfirm: () => updateOrderStatus(pedido.id, 'cancelado') }
                     };
                     confirmation.value = { ...details[action], isOpen: true };
                 };
 
-                const closeConfirmationModal = () => {
-                    confirmation.value.isOpen = false;
-                };
+                const closeConfirmationModal = () => { confirmation.value.isOpen = false; };
+                const executeConfirmation = () => { confirmation.value.onConfirm(); closeConfirmationModal(); };
 
-                const executeConfirmation = () => {
-                    confirmation.value.onConfirm();
-                    closeConfirmationModal();
-                };
+                const openAddItemsModal = (pedido) => { addItemsModal.value = { isOpen: true, pedidoId: pedido.id }; };
+                const closeAddItemsModal = () => { addItemsModal.value = { isOpen: false, pedidoId: null }; };
 
-                // --- Funciones de Utilidad y Ciclo de Vida ---
                 const calculateElapsedTime = (startTime) => {
                     const start = new Date(startTime);
-                    const elapsed = Math.floor((currentTime.value.getTime() - start.getTime()) / 1000);
+                    const elapsed = Math.floor((new Date().getTime() - start.getTime()) / 1000);
                     if (elapsed < 0) return '00:00';
                     const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
                     const seconds = (elapsed % 60).toString().padStart(2, '0');
@@ -659,16 +771,8 @@
                 };
 
                 const getStatusText = (estado) => (estado.replace('_', ' '));
-
-                const getStatusColor = (estado) => ({
-                    'en validacion': 'text-gray-500', 'en preparacion': 'text-yellow-600',
-                    'listo para entregar': 'text-blue-600', 'entregado': 'text-purple-600'
-                }[estado] || 'text-gray-500');
-                
-                const getCardBorder = (estado) => ({
-                    'en validacion': 'border-l-4 border-gray-400', 'en preparacion': 'border-l-4 border-yellow-500',
-                    'listo para entregar': 'border-l-4 border-blue-500', 'entregado': 'border-l-4 border-purple-500'
-                }[estado] || '');
+                const getStatusColor = (estado) => ({ 'en validacion': 'text-gray-500', 'en preparacion': 'text-yellow-600', 'listo para entregar': 'text-blue-600', 'entregado': 'text-purple-600' }[estado] || 'text-gray-500');
+                const getCardBorder = (estado) => ({ 'en validacion': 'border-l-4 border-gray-400', 'en preparacion': 'border-l-4 border-yellow-500', 'listo para entregar': 'border-l-4 border-blue-500', 'entregado': 'border-l-4 border-purple-500' }[estado] || '');
 
                 onMounted(() => {
                     fetchPedidos();
@@ -691,7 +795,7 @@
                     if (timerIntervalId) clearInterval(timerIntervalId);
                 });
 
-                return { loading, activePedidos, confirmation, openConfirmationModal, closeConfirmationModal, executeConfirmation, calculateElapsedTime, getStatusText, getStatusColor, getCardBorder, formatCurrency };
+                return { loading, activePedidos, confirmation, addItemsModal, openConfirmationModal, closeConfirmationModal, executeConfirmation, openAddItemsModal, closeAddItemsModal, calculateElapsedTime, getStatusText, getStatusColor, getCardBorder, formatCurrency, fetchPedidos };
             }
         };
 
