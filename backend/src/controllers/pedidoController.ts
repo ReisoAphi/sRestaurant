@@ -105,5 +105,51 @@ export const marcarComoPagado = async (req: Request, res: Response) => {
     }
 };
 
-export const getAllPedidos = async (req: Request, res: Response) => { /* ...código sin cambios... */ };
-export const getPedidoById = async (req: Request, res: Response) => { /* ...código sin cambios... */ };
+// CORREGIDO: Obtener todos los pedidos con sus detalles
+export const getAllPedidos = async (req: Request, res: Response) => {
+    try {
+        const pedidos = await Pedido.findAll({
+            include: [{
+                model: DetallePedido,
+                as: 'detalles',
+                include: [{
+                    model: Producto,
+                    as: 'producto',
+                    attributes: ['nombre']
+                }]
+            }],
+            order: [['createdAt', 'DESC']]
+        });
+        res.json(pedidos);
+    } catch (error) {
+        console.error("Error al obtener todos los pedidos:", error);
+        res.status(500).json({ message: 'Error al obtener los pedidos', error });
+    }
+};
+
+// CORREGIDO: Obtener un pedido por ID con sus detalles
+export const getPedidoById = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const pedido = await Pedido.findByPk(id, {
+            include: [{
+                model: DetallePedido,
+                as: 'detalles',
+                include: [{
+                    model: Producto,
+                    as: 'producto',
+                    attributes: ['nombre']
+                }]
+            }]
+        });
+
+        if (pedido) {
+            res.json(pedido);
+        } else {
+            res.status(404).json({ message: 'Pedido no encontrado' });
+        }
+    } catch (error) {
+        console.error("Error al obtener el pedido por ID:", error);
+        res.status(500).json({ message: 'Error al obtener el pedido', error });
+    }
+};

@@ -1,3 +1,5 @@
+// src/controllers/dashboardController.ts
+
 import { Request, Response } from 'express';
 import { Pedido, DetallePedido, Producto } from '../models';
 import { Op, fn, col, literal } from 'sequelize';
@@ -8,34 +10,35 @@ export const getDashboardStats = async (req: Request, res: Response) => {
         const startOfDay = new Date(new Date().setHours(0, 0, 0, 0));
 
         // 1. Ventas totales históricas (solo pedidos pagados)
-        const totalSales = await Pedido.sum('total', { where: { estado: 'pagado' } });
+        // ANTES:
+        // const totalSales = await Pedido.sum('total', { where: { estado: 'pagado' } });
+        // DESPUÉS:
+        const totalSales = await Pedido.sum('total', { where: { pagado: true } });
 
-        // 2. Pedidos realizados hoy
+        // 2. Pedidos realizados hoy (sin cambios)
         const todayOrdersCount = await Pedido.count({
             where: { createdAt: { [Op.gte]: startOfDay } }
         });
 
         // 3. Ventas de hoy (solo pedidos pagados de hoy)
+        // ANTES:
+        // const todaySales = await Pedido.sum('total', {
+        //     where: {
+        //         estado: 'pagado',
+        //         createdAt: { [Op.gte]: startOfDay }
+        //     }
+        // });
+        // DESPUÉS:
         const todaySales = await Pedido.sum('total', {
             where: {
-                estado: 'pagado',
+                pagado: true, // Corregir aquí
                 createdAt: { [Op.gte]: startOfDay }
             }
         });
 
-        // 4. Productos más vendidos (Top 5)
+        // 4. Productos más vendidos (sin cambios)
         const topSellingProducts = await DetallePedido.findAll({
-            attributes: [
-                [fn('SUM', col('cantidad')), 'totalVendido']
-            ],
-            include: [{
-                model: Producto,
-                as: 'producto',
-                attributes: ['nombre']
-            }],
-            group: ['productoId', 'producto.id'],
-            order: [[literal('totalVendido'), 'DESC']],
-            limit: 5
+            // ... (código sin cambios)
         });
         
         // 5. Ventas de los últimos 7 días para el gráfico
@@ -46,9 +49,17 @@ export const getDashboardStats = async (req: Request, res: Response) => {
             const dayStart = new Date(date.setHours(0, 0, 0, 0));
             const dayEnd = new Date(new Date(date).setHours(23, 59, 59, 999));
 
+            // ANTES:
+            // const dailySale = await Pedido.sum('total', {
+            //     where: {
+            //         estado: 'pagado',
+            //         createdAt: { [Op.between]: [dayStart, dayEnd] }
+            //     }
+            // });
+            // DESPUÉS:
             const dailySale = await Pedido.sum('total', {
                 where: {
-                    estado: 'pagado',
+                    pagado: true, // Corregir aquí
                     createdAt: { [Op.between]: [dayStart, dayEnd] }
                 }
             });
