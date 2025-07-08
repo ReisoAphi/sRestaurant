@@ -518,6 +518,7 @@
             `,
             setup(props, { emit }) {
                 const localOrder = ref(JSON.parse(JSON.stringify(props.order)));
+                const currentTime = ref(new Date());
                 const confirmation = ref({ isOpen: false, message: '', icon: '', confirmButtonClass: '', onConfirm: () => {} });
                 const addItemsModal = ref({ isOpen: false, pedidoId: null });
                 let timerIntervalId = null;
@@ -566,7 +567,7 @@
 
                 const calculateElapsedTime = (startTime) => {
                     const start = new Date(startTime);
-                    const elapsed = Math.floor((Date.now() - start.getTime()) / 1000);
+                    const elapsed = Math.floor((currentTime.value.getTime() - start.getTime()) / 1000);
                     if (elapsed < 0) return '00:00';
                     const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
                     const seconds = (elapsed % 60).toString().padStart(2, '0');
@@ -583,7 +584,7 @@
 
                 onMounted(() => {
                     timerIntervalId = setInterval(() => {
-                        // Force reactivity update for elapsed time
+                        currentTime.value = new Date();
                     }, 1000);
                 });
 
