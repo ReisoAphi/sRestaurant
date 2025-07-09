@@ -1043,7 +1043,7 @@
                                 <span>Total:</span>
                                 <span>{{ formatCurrency(pedido.total) }}</span>
                             </div>
-                            <div v-if="pedido.pagado || pedido.estado === 'cancelado'" class="text-center mt-8">
+                            <div v-if="(pedido.estado === 'entregado' && pedido.pagado) || pedido.estado === 'cancelado'" class="text-center mt-8">
                                 <button @click="startNewOrder" class="bg-emerald-500 text-white font-bold py-2 px-6 rounded-lg">
                                     Crear un Nuevo Pedido
                                 </button>
@@ -1082,12 +1082,14 @@
                 };
                 const statusInfo = computed(() => {
                     if (!pedido.value) return {};
-                    if (pedido.value.pagado) return { text: '¡Buen provecho!', icon: 'ph-duotone ph-check-circle', class: 'bg-green-100 text-green-800' };
+                    if (pedido.value.estado === 'entregado' && pedido.value.pagado) {
+                         return { text: '¡Buen provecho!', icon: 'ph-duotone ph-check-circle', class: 'bg-green-100 text-green-800' };
+                    }
                     switch(pedido.value.estado) {
                         case 'en validacion': return { text: 'Validando Pedido', icon: 'ph-duotone ph-question', class: 'bg-gray-100 text-gray-800' };
                         case 'en preparacion': return { text: 'En preparación', icon: 'ph-duotone ph-fire', class: 'bg-yellow-100 text-yellow-800' };
                         case 'listo para entregar': return { text: '¡Listo para entregar!', icon: 'ph-duotone ph-bell', class: 'bg-blue-100 text-blue-800' };
-                        case 'entregado': return { text: 'Pedido Entregado', icon: 'ph-duotone ph-smiley', class: 'bg-purple-100 text-purple-800' };
+                        case 'entregado': return { text: 'Pedido Entregado (Pendiente de pago)', icon: 'ph-duotone ph-smiley', class: 'bg-purple-100 text-purple-800' };
                         case 'cancelado': return { text: 'Cancelado', icon: 'ph-duotone ph-x-circle', class: 'bg-red-100 text-red-800' };
                         default: return { text: 'Desconocido', icon: 'ph-duotone ph-question', class: 'bg-gray-100 text-gray-800' };
                     }
