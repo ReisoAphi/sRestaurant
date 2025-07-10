@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TPV para Restaurante</title>
     <!-- Tailwind CSS -->
-    <script src="./tailwindcss.com.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <!-- Tailwind CSS Configuration -->
     <script>
         tailwind.config = {
@@ -13,21 +13,21 @@
         }
     </script>
     <!-- Vue.js 3 -->
-    <script src="./vue.global.js"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <!-- Vue Router -->
-    <script src="./vue-router.global.js"></script>
+    <script src="https://unpkg.com/vue-router@4/dist/vue-router.global.js"></script>
     <!-- Vue Demi (Dependencia para Pinia) -->
-    <script src="./vue-demi.iife.js"></script>
+    <script src="https://unpkg.com/vue-demi"></script>
     <!-- Pinia -->
-    <script src="./pinia.iife.js"></script>
+    <script src="https://unpkg.com/pinia@2/dist/pinia.iife.js"></script>
     <!-- Axios -->
-    <script src="./axios.min.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
     <!-- Socket.IO Client -->
-    <script src="./socket.io.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <!-- Chart.js -->
-    <script src="./chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- QR Code Generator -->
-    <script src="./qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1/build/qrcode.min.js"></script>
     <!-- Phosphor Icons -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <style>
@@ -50,7 +50,7 @@
         const { createPinia, defineStore } = Pinia;
 
         // --- CONFIGURACIÓN DINÁMICA DE LA API ---
-        const backendHostname = window.location.hostname || '127.0.0.1';
+        const backendHostname = window.location.hostname || 'localhost';
         const backendUrl = `http://${backendHostname}:3000`;
 
         // --- SERVICIO API (Axios) ---
