@@ -6,6 +6,12 @@
     <title>TPV para Restaurante</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tailwind CSS Configuration -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
     <!-- Vue.js 3 -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <!-- Vue Router -->
@@ -20,6 +26,8 @@
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- QR Code Generator -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1/build/qrcode.min.js"></script>
     <!-- Phosphor Icons -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <style>
@@ -28,9 +36,10 @@
         .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
         .fade-enter-from, .fade-leave-to { opacity: 0; }
         .bottom-nav-link.router-link-active { color: #10b981; /* emerald-500 */ }
+        .dark .bottom-nav-link.router-link-active { color: #34d399; /* emerald-400 */ }
     </style>
 </head>
-<body class="bg-gray-100">
+<body class="bg-gray-100 dark:bg-gray-900">
     <div id="app">
         <!-- El contenido se renderizará aquí por Vue Router -->
     </div>
@@ -59,6 +68,38 @@
             return config;
         }, error => {
             return Promise.reject(error);
+        });
+
+        // --- STORE DE TEMA (MODO OSCURO) ---
+        const useThemeStore = defineStore('theme', () => {
+            const theme = ref(localStorage.getItem('theme') || 'light');
+
+            function toggleTheme() {
+                theme.value = theme.value === 'light' ? 'dark' : 'light';
+                localStorage.setItem('theme', theme.value);
+                updateHtmlClass();
+            }
+
+            function updateHtmlClass() {
+                 if (theme.value === 'dark') {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+            }
+            
+            function initTheme() {
+                const storedTheme = localStorage.getItem('theme');
+                const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                if (storedTheme) {
+                    theme.value = storedTheme;
+                } else {
+                    theme.value = systemPrefersDark ? 'dark' : 'light';
+                }
+                updateHtmlClass();
+            }
+
+            return { theme, toggleTheme, initTheme };
         });
 
         // --- STORE DE AUTENTICACIÓN (Pinia) ---
@@ -163,32 +204,48 @@
             return { items, mesaNombre, totalItems, subtotal, impuestos, total, consumerOrderId, addItem, removeItem, updateQuantity, submitPedido, submitWaiterPedido, resetCart, clearConsumerOrder };
         });
 
+        // --- STORE DE CONFIGURACIÓN ---
+        const useSettingsStore = defineStore('settings', () => {
+            const ssid = ref(localStorage.getItem('wifiSSID') || '');
+            const password = ref(localStorage.getItem('wifiPassword') || '');
+
+            function saveSettings(newSsid, newPassword) {
+                ssid.value = newSsid;
+                password.value = newPassword;
+                localStorage.setItem('wifiSSID', newSsid);
+                localStorage.setItem('wifiPassword', newPassword);
+            }
+
+            return { ssid, password, saveSettings };
+        });
+
+
         // --- COMPONENTES Y VISTAS ---
         const formatCurrency = (value) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(value || 0);
         
         const LoginModal = {
             template: `
                 <div v-if="auth.isLoginModalOpen" @click.self="auth.closeLoginModal()" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div class="w-full max-w-md bg-white rounded-lg shadow-md p-8 relative">
-                        <button @click="auth.closeLoginModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+                    <div class="w-full max-w-md bg-white dark:bg-gray-800 rounded-lg shadow-md p-8 relative">
+                        <button @click="auth.closeLoginModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                             <i class="ph ph-x text-2xl"></i>
                         </button>
                         <div class="text-center mb-8">
                             <i class="ph-duotone ph-storefront text-6xl text-emerald-500"></i>
-                            <h1 class="text-3xl font-bold text-gray-800 mt-2">Acceso Staff</h1>
-                            <p class="text-gray-500">Inicia sesión para continuar</p>
+                            <h1 class="text-3xl font-bold text-gray-800 dark:text-gray-100 mt-2">Acceso Staff</h1>
+                            <p class="text-gray-500 dark:text-gray-400">Inicia sesión para continuar</p>
                         </div>
                         <form @submit.prevent="handleLogin">
                             <div v-if="error" class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6" role="alert">
                                 <p>{{ error }}</p>
                             </div>
                             <div class="mb-4">
-                                <label for="username" class="block text-sm font-medium text-gray-700">Usuario</label>
-                                <input v-model="username" type="text" id="username" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" required>
+                                <label for="username" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Usuario</label>
+                                <input v-model="username" type="text" id="username" class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" required>
                             </div>
                             <div class="mb-6">
-                                <label for="password" class="block text-sm font-medium text-gray-700">Contraseña</label>
-                                <input v-model="password" type="password" id="password" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" required>
+                                <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Contraseña</label>
+                                <input v-model="password" type="password" id="password" class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" required>
                             </div>
                             <button type="submit" :disabled="loading" class="w-full py-3 px-4 bg-emerald-500 text-white font-bold rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-75 disabled:cursor-not-allowed flex items-center justify-center">
                                 <i v-if="loading" class="ph-duotone ph-spinner-gap animate-spin text-2xl mr-2"></i>
@@ -221,25 +278,25 @@
         const CartComponent = {
             props: { isWaiter: { type: Boolean, default: false } },
             template: `
-                <div class="bg-white rounded-lg shadow-lg p-6 flex flex-col h-full">
-                    <h2 class="text-2xl font-bold text-gray-800 border-b pb-4 mb-4">Orden Actual</h2>
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 flex flex-col h-full">
+                    <h2 class="text-2xl font-bold text-gray-800 dark:text-gray-100 border-b dark:border-gray-700 pb-4 mb-4">Orden Actual</h2>
                     <div v-if="isWaiter" class="mb-4">
-                        <label for="mesa" class="block text-sm font-medium text-gray-700">Nombre de la Mesa / Cliente</label>
-                        <input type="text" id="mesa" v-model="cart.mesaNombre" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+                        <label for="mesa" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre de la Mesa / Cliente</label>
+                        <input type="text" id="mesa" v-model="cart.mesaNombre" class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm dark:text-white">
                     </div>
                     <div class="flex-1 overflow-y-auto pr-2">
-                        <div v-if="cart.items.length === 0" class="text-center text-gray-500 py-10">
+                        <div v-if="cart.items.length === 0" class="text-center text-gray-500 dark:text-gray-400 py-10">
                             <i class="ph-duotone ph-shopping-cart text-5xl"></i>
                             <p class="mt-2">Añade productos para empezar</p>
                         </div>
-                        <ul v-else class="divide-y divide-gray-200">
+                        <ul v-else class="divide-y divide-gray-200 dark:divide-gray-700">
                             <li v-for="item in cart.items" :key="item.id" class="py-3 flex items-center">
                                 <div class="flex-1">
-                                    <p class="font-semibold text-gray-800">{{ item.nombre }}</p>
-                                    <p class="text-sm text-gray-500">{{ formatCurrency(item.precio) }}</p>
+                                    <p class="font-semibold text-gray-800 dark:text-gray-200">{{ item.nombre }}</p>
+                                    <p class="text-sm text-gray-500 dark:text-gray-400">{{ formatCurrency(item.precio) }}</p>
                                 </div>
                                 <div class="flex items-center">
-                                    <input type="number" min="1" :value="item.cantidad" @change="updateQuantity(item.id, $event.target.value)" class="w-16 text-center border-gray-300 rounded-md">
+                                    <input type="number" min="1" :value="item.cantidad" @change="updateQuantity(item.id, $event.target.value)" class="w-16 text-center border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 dark:text-white">
                                     <button @click="cart.removeItem(item.id)" class="ml-3 text-red-500 hover:text-red-700">
                                         <i class="ph ph-trash text-xl"></i>
                                     </button>
@@ -247,10 +304,10 @@
                             </li>
                         </ul>
                     </div>
-                    <div v-if="cart.totalItems > 0" class="border-t pt-4 mt-4 space-y-2 text-gray-700">
+                    <div v-if="cart.totalItems > 0" class="border-t dark:border-gray-700 pt-4 mt-4 space-y-2 text-gray-700 dark:text-gray-300">
                         <div class="flex justify-between"><span>Subtotal</span><span class="font-medium">{{ formatCurrency(cart.subtotal) }}</span></div>
                         <div class="flex justify-between"><span>Impuestos (16%)</span><span class="font-medium">{{ formatCurrency(cart.impuestos) }}</span></div>
-                        <div class="flex justify-between text-xl font-bold text-gray-900"><span>Total</span><span>{{ formatCurrency(cart.total) }}</span></div>
+                        <div class="flex justify-between text-xl font-bold text-gray-900 dark:text-white"><span>Total</span><span>{{ formatCurrency(cart.total) }}</span></div>
                     </div>
                     <div class="mt-6">
                         <button @click="handleCheckout" class="w-full py-3 px-4 bg-emerald-500 text-white font-bold rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50" :disabled="cart.totalItems === 0 || isSubmitting">
@@ -292,24 +349,24 @@
             props: ['product'],
             emits: ['add-to-cart'],
             template: `
-                <div @click="$emit('add-to-cart', product)" class="bg-white rounded-lg shadow-md overflow-hidden cursor-pointer hover:shadow-xl transition-shadow duration-300 transform hover:-translate-y-1 flex flex-col">
-                    <div class="h-40 bg-gray-200 flex items-center justify-center relative overflow-hidden">
+                <div @click="$emit('add-to-cart', product)" class="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden cursor-pointer hover:shadow-xl transition-shadow duration-300 transform hover:-translate-y-1 flex flex-col">
+                    <div class="h-40 bg-gray-200 dark:bg-gray-700 flex items-center justify-center relative overflow-hidden">
                         <img v-if="product.imagen_url" :src="product.imagen_url" @error="onImageError" class="w-full h-full object-cover" :alt="'Imagen de ' + product.nombre">
-                        <i v-else class="ph-duotone ph-hamburger text-6xl text-gray-400"></i>
+                        <i v-else class="ph-duotone ph-hamburger text-6xl text-gray-400 dark:text-gray-500"></i>
                     </div>
                     <div class="p-4 flex-1 flex flex-col justify-between">
                         <div>
-                            <h3 class="font-semibold text-gray-800 truncate">{{ product.nombre }}</h3>
-                            <p v-if="product.descripcion" class="text-xs text-gray-500 mt-1 h-8 overflow-hidden">{{ product.descripcion }}</p>
+                            <h3 class="font-semibold text-gray-800 dark:text-gray-200 truncate">{{ product.nombre }}</h3>
+                            <p v-if="product.descripcion" class="text-xs text-gray-500 dark:text-gray-400 mt-1 h-8 overflow-hidden">{{ product.descripcion }}</p>
                         </div>
-                        <p class="text-emerald-600 font-bold mt-2">{{ formatCurrency(product.precio) }}</p>
+                        <p class="text-emerald-600 dark:text-emerald-400 font-bold mt-2">{{ formatCurrency(product.precio) }}</p>
                     </div>
                 </div>`,
             setup() {
                 const onImageError = (event) => {
                     const placeholder = document.createElement('div');
-                    placeholder.className = 'w-full h-full flex items-center justify-center bg-gray-100';
-                    placeholder.innerHTML = '<i class="ph-duotone ph-image-broken text-5xl text-gray-400"></i>';
+                    placeholder.className = 'w-full h-full flex items-center justify-center bg-gray-100 dark:bg-gray-700';
+                    placeholder.innerHTML = '<i class="ph-duotone ph-image-broken text-5xl text-gray-400 dark:text-gray-500"></i>';
                     event.target.parentNode.replaceChild(placeholder, event.target);
                 };
                 return { formatCurrency, onImageError };
@@ -322,10 +379,10 @@
             components: { ProductCard },
             template: `
                 <div v-if="isVisible" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-                    <div class="w-full max-w-4xl h-[90vh] bg-white rounded-lg shadow-xl flex flex-col">
-                        <header class="p-4 border-b flex justify-between items-center">
-                            <h2 class="text-2xl font-bold text-gray-800">Añadir a Pedido #{{ pedidoId }}</h2>
-                            <button @click="$emit('close')" class="text-gray-400 hover:text-gray-600">
+                    <div class="w-full max-w-4xl h-[90vh] bg-white dark:bg-gray-800 rounded-lg shadow-xl flex flex-col">
+                        <header class="p-4 border-b dark:border-gray-700 flex justify-between items-center">
+                            <h2 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Añadir a Pedido #{{ pedidoId }}</h2>
+                            <button @click="$emit('close')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                                 <i class="ph ph-x text-3xl"></i>
                             </button>
                         </header>
@@ -333,39 +390,39 @@
                         <div class="flex-1 flex flex-col md:flex-row gap-6 p-4 overflow-hidden">
                             <!-- Columna de Productos -->
                             <div class="w-full md:w-2/3 flex flex-col">
-                                <div class="mb-4"><input type="text" v-model="searchTerm" placeholder="Buscar producto..." class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+                                <div class="mb-4"><input type="text" v-model="searchTerm" placeholder="Buscar producto..." class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white"></div>
                                 <div class="flex flex-wrap gap-2 mb-4">
-                                    <button @click="selectedCategory = null" :class="{'bg-emerald-500 text-white': selectedCategory === null, 'bg-white text-gray-700': selectedCategory !== null}" class="px-4 py-2 rounded-full shadow-sm text-sm font-medium hover:bg-emerald-100 transition-colors">Todos</button>
-                                    <button v-for="category in categories" :key="category.id" @click="selectedCategory = category.id" :class="{'bg-emerald-500 text-white': selectedCategory === category.id, 'bg-white text-gray-700': selectedCategory !== category.id}" class="px-4 py-2 rounded-full shadow-sm text-sm font-medium hover:bg-emerald-100 transition-colors">{{ category.nombre }}</button>
+                                    <button @click="selectedCategory = null" :class="{'bg-emerald-500 text-white': selectedCategory === null, 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300': selectedCategory !== null}" class="px-4 py-2 rounded-full shadow-sm text-sm font-medium hover:bg-emerald-100 dark:hover:bg-gray-600 transition-colors">Todos</button>
+                                    <button v-for="category in categories" :key="category.id" @click="selectedCategory = category.id" :class="{'bg-emerald-500 text-white': selectedCategory === category.id, 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300': selectedCategory !== category.id}" class="px-4 py-2 rounded-full shadow-sm text-sm font-medium hover:bg-emerald-100 dark:hover:bg-gray-600 transition-colors">{{ category.nombre }}</button>
                                 </div>
                                 <div v-if="loading" class="flex-1 flex items-center justify-center"><i class="ph-duotone ph-spinner-gap animate-spin text-5xl text-emerald-500"></i></div>
-                                <div v-else-if="filteredProducts.length === 0" class="flex-1 flex items-center justify-center"><p>No se encontraron productos.</p></div>
+                                <div v-else-if="filteredProducts.length === 0" class="flex-1 flex items-center justify-center"><p class="dark:text-gray-400">No se encontraron productos.</p></div>
                                 <div v-else class="flex-1 overflow-y-auto pr-2 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                                     <ProductCard v-for="product in filteredProducts" :key="product.id" :product="product" @add-to-cart="addItem"/>
                                 </div>
                             </div>
 
                             <!-- Columna de Carrito de Adición -->
-                            <div class="w-full md:w-1/3 bg-gray-50 rounded-lg p-4 flex flex-col">
-                                <h3 class="text-xl font-bold text-gray-800 border-b pb-3 mb-3">Nuevos Items</h3>
+                            <div class="w-full md:w-1/3 bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 flex flex-col">
+                                <h3 class="text-xl font-bold text-gray-800 dark:text-gray-100 border-b dark:border-gray-700 pb-3 mb-3">Nuevos Items</h3>
                                 <div class="flex-1 overflow-y-auto">
-                                    <div v-if="newItems.length === 0" class="text-center text-gray-500 py-10">
+                                    <div v-if="newItems.length === 0" class="text-center text-gray-500 dark:text-gray-400 py-10">
                                         <p>Añade productos del menú.</p>
                                     </div>
-                                    <ul v-else class="divide-y divide-gray-200">
+                                    <ul v-else class="divide-y divide-gray-200 dark:divide-gray-700">
                                         <li v-for="item in newItems" :key="item.id" class="py-2 flex items-center">
                                             <div class="flex-1">
-                                                <p class="font-semibold text-gray-800">{{ item.nombre }}</p>
-                                                <p class="text-sm text-gray-500">{{ formatCurrency(item.precio) }}</p>
+                                                <p class="font-semibold text-gray-800 dark:text-gray-200">{{ item.nombre }}</p>
+                                                <p class="text-sm text-gray-500 dark:text-gray-400">{{ formatCurrency(item.precio) }}</p>
                                             </div>
                                             <div class="flex items-center">
-                                                <input type="number" min="1" :value="item.cantidad" @change="updateQuantity(item.id, $event.target.value)" class="w-16 text-center border-gray-300 rounded-md">
+                                                <input type="number" min="1" :value="item.cantidad" @change="updateQuantity(item.id, $event.target.value)" class="w-16 text-center border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 dark:text-white">
                                                 <button @click="removeItem(item.id)" class="ml-2 text-red-500 hover:text-red-700"><i class="ph ph-trash"></i></button>
                                             </div>
                                         </li>
                                     </ul>
                                 </div>
-                                <div class="border-t pt-4 mt-4">
+                                <div class="border-t dark:border-gray-700 pt-4 mt-4">
                                     <button @click="confirmAddItems" class="w-full py-3 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50" :disabled="newItems.length === 0 || isSubmitting">
                                         <span v-if="isSubmitting">Añadiendo...</span>
                                         <span v-else>Confirmar Adición</span>
@@ -459,21 +516,21 @@
             emits: ['order-updated'],
             components: { AddItemsModal },
             template: `
-                <div class="bg-white rounded-lg shadow-md p-5 flex flex-col" :class="getCardBorder(localOrder.estado)">
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-5 flex flex-col" :class="getCardBorder(localOrder.estado)">
                     <div class="flex justify-between items-start mb-3">
-                        <h3 class="text-xl font-bold text-gray-800">{{ localOrder.mesa_nombre }} - #{{ localOrder.id }}</h3>
+                        <h3 class="text-xl font-bold text-gray-800 dark:text-gray-100">{{ localOrder.mesa_nombre }} - #{{ localOrder.id }}</h3>
                         <span class="text-lg font-bold flex items-center gap-1" :class="getStatusColor(localOrder.estado)">
                             <i class="ph-duotone ph-timer"></i>
                             <span>{{ calculateElapsedTime(localOrder.createdAt) }}</span>
                         </span>
                     </div>
                     <p class="mb-3 font-semibold capitalize" :class="getStatusColor(localOrder.estado)">Estado: {{ getStatusText(localOrder.estado) }}</p>
-                    <ul class="flex-1 border-t border-b border-gray-200 py-3 my-3 space-y-2">
-                        <li v-for="detalle in localOrder.detalles" :key="detalle.id" class="flex justify-between items-center"><span class="text-gray-700">{{ detalle.producto.nombre }}</span><span class="font-bold text-emerald-600">x {{ detalle.cantidad }}</span></li>
+                    <ul class="flex-1 border-t border-b border-gray-200 dark:border-gray-700 py-3 my-3 space-y-2">
+                        <li v-for="detalle in localOrder.detalles" :key="detalle.id" class="flex justify-between items-center"><span class="text-gray-700 dark:text-gray-300">{{ detalle.producto.nombre }}</span><span class="font-bold text-emerald-600 dark:text-emerald-400">x {{ detalle.cantidad }}</span></li>
                     </ul>
                     
-                    <div v-if="!localOrder.pagado" class="border-t border-gray-200 pt-3 mt-3">
-                        <div class="flex justify-between items-center text-lg font-bold text-gray-800">
+                    <div v-if="!localOrder.pagado" class="border-t border-gray-200 dark:border-gray-700 pt-3 mt-3">
+                        <div class="flex justify-between items-center text-lg font-bold text-gray-800 dark:text-gray-100">
                             <span>Total a Cobrar:</span>
                             <span>{{ formatCurrency(localOrder.total) }}</span>
                         </div>
@@ -498,12 +555,12 @@
                 </div>
                 
                 <div v-if="confirmation.isOpen" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-                    <div class="w-full max-w-sm bg-white rounded-lg shadow-xl p-6 text-center">
+                    <div class="w-full max-w-sm bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 text-center">
                         <i :class="confirmation.icon" class="text-5xl mb-4"></i>
-                        <h3 class="text-lg font-semibold text-gray-800 mb-2">Confirmar Acción</h3>
-                        <p class="text-gray-600 mb-6">{{ confirmation.message }}</p>
+                        <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-2">Confirmar Acción</h3>
+                        <p class="text-gray-600 dark:text-gray-300 mb-6">{{ confirmation.message }}</p>
                         <div class="flex justify-center gap-4">
-                            <button @click="closeConfirmationModal" class="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">Cancelar</button>
+                            <button @click="closeConfirmationModal" class="px-6 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600">Cancelar</button>
                             <button @click="executeConfirmation" :class="confirmation.confirmButtonClass" class="px-6 py-2 text-white font-semibold rounded-lg">Confirmar</button>
                         </div>
                     </div>
@@ -575,7 +632,7 @@
                 };
 
                 const getStatusText = (estado) => (estado.replace('_', ' '));
-                const getStatusColor = (estado) => ({ 'en validacion': 'text-gray-500', 'en preparacion': 'text-yellow-600', 'listo para entregar': 'text-blue-600', 'entregado': 'text-purple-600' }[estado] || 'text-gray-500');
+                const getStatusColor = (estado) => ({ 'en validacion': 'text-gray-500 dark:text-gray-400', 'en preparacion': 'text-yellow-600 dark:text-yellow-400', 'listo para entregar': 'text-blue-600 dark:text-blue-400', 'entregado': 'text-purple-600 dark:text-purple-400' }[estado] || 'text-gray-500 dark:text-gray-400');
                 const getCardBorder = (estado) => ({ 'en validacion': 'border-l-4 border-gray-400', 'en preparacion': 'border-l-4 border-yellow-500', 'listo para entregar': 'border-l-4 border-blue-500', 'entregado': 'border-l-4 border-purple-500' }[estado] || '');
                 
                 watch(() => props.order, (newOrder) => {
@@ -601,13 +658,13 @@
             template: `
                 <div class="flex flex-col md:flex-row gap-6 h-full">
                     <div class="w-full md:w-2/3">
-                        <div class="mb-4"><input type="text" v-model="searchTerm" placeholder="Buscar producto..." class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+                        <div class="mb-4"><input type="text" v-model="searchTerm" placeholder="Buscar producto..." class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"></div>
                         <div class="flex flex-wrap gap-2 mb-6">
-                             <button @click="selectedCategory = null" :class="{'bg-emerald-500 text-white': selectedCategory === null, 'bg-white text-gray-700': selectedCategory !== null}" class="px-4 py-2 rounded-full shadow-sm text-sm font-medium hover:bg-emerald-100 transition-colors">Todos</button>
-                            <button v-for="category in categories" :key="category.id" @click="selectedCategory = category.id" :class="{'bg-emerald-500 text-white': selectedCategory === category.id, 'bg-white text-gray-700': selectedCategory !== category.id}" class="px-4 py-2 rounded-full shadow-sm text-sm font-medium hover:bg-emerald-100 transition-colors">{{ category.nombre }}</button>
+                             <button @click="selectedCategory = null" :class="{'bg-emerald-500 text-white': selectedCategory === null, 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300': selectedCategory !== null}" class="px-4 py-2 rounded-full shadow-sm text-sm font-medium hover:bg-emerald-100 dark:hover:bg-gray-700 transition-colors">Todos</button>
+                            <button v-for="category in categories" :key="category.id" @click="selectedCategory = category.id" :class="{'bg-emerald-500 text-white': selectedCategory === category.id, 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300': selectedCategory !== category.id}" class="px-4 py-2 rounded-full shadow-sm text-sm font-medium hover:bg-emerald-100 dark:hover:bg-gray-700 transition-colors">{{ category.nombre }}</button>
                         </div>
-                        <div v-if="loading" class="text-center py-10"><i class="ph-duotone ph-spinner-gap animate-spin text-5xl text-emerald-500"></i><p class="mt-2 text-gray-600">Cargando productos...</p></div>
-                        <div v-else-if="filteredProducts.length === 0" class="text-center py-10"><i class="ph-duotone ph-smiley-sad text-5xl text-gray-400"></i><p class="mt-2 text-gray-600">No se encontraron productos.</p></div>
+                        <div v-if="loading" class="text-center py-10"><i class="ph-duotone ph-spinner-gap animate-spin text-5xl text-emerald-500"></i><p class="mt-2 text-gray-600 dark:text-gray-400">Cargando productos...</p></div>
+                        <div v-else-if="filteredProducts.length === 0" class="text-center py-10"><i class="ph-duotone ph-smiley-sad text-5xl text-gray-400"></i><p class="mt-2 text-gray-600 dark:text-gray-400">No se encontraron productos.</p></div>
                         <transition-group name="slide-up" tag="div" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                              <ProductCard v-for="product in filteredProducts" :key="product.id" :product="product" @add-to-cart="cart.addItem"/>
                         </transition-group>
@@ -651,13 +708,13 @@
             template: `
                 <div class="flex flex-col h-full">
                     <div class="w-full">
-                        <div class="mb-4"><input type="text" v-model="searchTerm" placeholder="Buscar producto..." class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+                        <div class="mb-4"><input type="text" v-model="searchTerm" placeholder="Buscar producto..." class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"></div>
                         <div class="flex flex-wrap gap-2 mb-6">
-                            <button @click="selectedCategory = null" :class="{'bg-emerald-500 text-white': selectedCategory === null, 'bg-white text-gray-700': selectedCategory !== null}" class="px-4 py-2 rounded-full shadow-sm text-sm font-medium hover:bg-emerald-100 transition-colors">Todos</button>
-                            <button v-for="category in categories" :key="category.id" @click="selectedCategory = category.id" :class="{'bg-emerald-500 text-white': selectedCategory === category.id, 'bg-white text-gray-700': selectedCategory !== category.id}" class="px-4 py-2 rounded-full shadow-sm text-sm font-medium hover:bg-emerald-100 transition-colors">{{ category.nombre }}</button>
+                            <button @click="selectedCategory = null" :class="{'bg-emerald-500 text-white': selectedCategory === null, 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300': selectedCategory !== null}" class="px-4 py-2 rounded-full shadow-sm text-sm font-medium hover:bg-emerald-100 dark:hover:bg-gray-700 transition-colors">Todos</button>
+                            <button v-for="category in categories" :key="category.id" @click="selectedCategory = category.id" :class="{'bg-emerald-500 text-white': selectedCategory === category.id, 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300': selectedCategory !== category.id}" class="px-4 py-2 rounded-full shadow-sm text-sm font-medium hover:bg-emerald-100 dark:hover:bg-gray-700 transition-colors">{{ category.nombre }}</button>
                         </div>
-                        <div v-if="loading" class="text-center py-10"><i class="ph-duotone ph-spinner-gap animate-spin text-5xl text-emerald-500"></i><p class="mt-2 text-gray-600">Cargando productos...</p></div>
-                        <div v-else-if="filteredProducts.length === 0" class="text-center py-10"><i class="ph-duotone ph-smiley-sad text-5xl text-gray-400"></i><p class="mt-2 text-gray-600">No se encontraron productos.</p></div>
+                        <div v-if="loading" class="text-center py-10"><i class="ph-duotone ph-spinner-gap animate-spin text-5xl text-emerald-500"></i><p class="mt-2 text-gray-600 dark:text-gray-400">Cargando productos...</p></div>
+                        <div v-else-if="filteredProducts.length === 0" class="text-center py-10"><i class="ph-duotone ph-smiley-sad text-5xl text-gray-400"></i><p class="mt-2 text-gray-600 dark:text-gray-400">No se encontraron productos.</p></div>
                         <transition-group name="slide-up" tag="div" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                             <ProductCard v-for="product in filteredProducts" :key="product.id" :product="product" @add-to-cart="cart.addItem"/>
                         </transition-group>
@@ -700,9 +757,9 @@
             template: `
                 <div class="max-w-2xl mx-auto p-4">
                     <div v-if="!submittedOrder">
-                        <div class="bg-white rounded-lg shadow-lg p-6 flex flex-col h-full">
-                            <h2 class="text-2xl font-bold text-gray-800 border-b pb-4 mb-4">Revisar e Ingresar Pedido</h2>
-                            <div v-if="cart.items.length === 0" class="text-center text-gray-500 py-20">
+                        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 flex flex-col h-full">
+                            <h2 class="text-2xl font-bold text-gray-800 dark:text-gray-100 border-b dark:border-gray-700 pb-4 mb-4">Revisar e Ingresar Pedido</h2>
+                            <div v-if="cart.items.length === 0" class="text-center text-gray-500 dark:text-gray-400 py-20">
                                 <i class="ph-duotone ph-shopping-cart text-6xl"></i>
                                 <p class="mt-4 text-lg">No hay productos en la orden.</p>
                                 <router-link to="/crear-pedido" class="mt-6 inline-block bg-emerald-500 text-white font-bold py-2 px-6 rounded-lg">
@@ -711,18 +768,18 @@
                             </div>
                             <template v-else>
                                 <div class="mb-4">
-                                    <label for="mesa" class="block text-sm font-medium text-gray-700">Nombre de la Mesa / Cliente</label>
-                                    <input type="text" id="mesa" v-model="cart.mesaNombre" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+                                    <label for="mesa" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre de la Mesa / Cliente</label>
+                                    <input type="text" id="mesa" v-model="cart.mesaNombre" class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm dark:text-white">
                                 </div>
                                 <div class="flex-1 overflow-y-auto pr-2">
-                                    <ul class="divide-y divide-gray-200">
+                                    <ul class="divide-y divide-gray-200 dark:divide-gray-700">
                                         <li v-for="item in cart.items" :key="item.id" class="py-3 flex items-center">
                                             <div class="flex-1">
-                                                <p class="font-semibold text-gray-800">{{ item.nombre }}</p>
-                                                <p class="text-sm text-gray-500">{{ formatCurrency(item.precio) }}</p>
+                                                <p class="font-semibold text-gray-800 dark:text-gray-200">{{ item.nombre }}</p>
+                                                <p class="text-sm text-gray-500 dark:text-gray-400">{{ formatCurrency(item.precio) }}</p>
                                             </div>
                                             <div class="flex items-center">
-                                                <input type="number" min="1" :value="item.cantidad" @change="updateQuantity(item.id, $event.target.value)" class="w-16 text-center border-gray-300 rounded-md">
+                                                <input type="number" min="1" :value="item.cantidad" @change="updateQuantity(item.id, $event.target.value)" class="w-16 text-center border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 dark:text-white">
                                                 <button @click="cart.removeItem(item.id)" class="ml-3 text-red-500 hover:text-red-700">
                                                     <i class="ph ph-trash text-xl"></i>
                                                 </button>
@@ -730,10 +787,10 @@
                                         </li>
                                     </ul>
                                 </div>
-                                <div class="border-t pt-4 mt-4 space-y-2 text-gray-700">
+                                <div class="border-t dark:border-gray-700 pt-4 mt-4 space-y-2 text-gray-700 dark:text-gray-300">
                                     <div class="flex justify-between"><span>Subtotal</span><span class="font-medium">{{ formatCurrency(cart.subtotal) }}</span></div>
                                     <div class="flex justify-between"><span>Impuestos (16%)</span><span class="font-medium">{{ formatCurrency(cart.impuestos) }}</span></div>
-                                    <div class="flex justify-between text-xl font-bold text-gray-900"><span>Total</span><span>{{ formatCurrency(cart.total) }}</span></div>
+                                    <div class="flex justify-between text-xl font-bold text-gray-900 dark:text-white"><span>Total</span><span>{{ formatCurrency(cart.total) }}</span></div>
                                 </div>
                                 <div class="mt-6">
                                     <button @click="handleCheckout" class="w-full py-3 px-4 bg-emerald-500 text-white font-bold rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50" :disabled="cart.totalItems === 0 || isSubmitting">
@@ -746,8 +803,8 @@
                     </div>
                     <div v-else>
                         <div class="mb-4 text-center">
-                            <h2 class="text-2xl font-bold text-gray-800">¡Pedido Ingresado!</h2>
-                            <p class="text-gray-500">Ahora puedes gestionar el pedido directamente.</p>
+                            <h2 class="text-2xl font-bold text-gray-800 dark:text-gray-100">¡Pedido Ingresado!</h2>
+                            <p class="text-gray-500 dark:text-gray-400">Ahora puedes gestionar el pedido directamente.</p>
                         </div>
                         <OrderCard :order="submittedOrder" @order-updated="updateSubmittedOrder" />
                         <button @click="createNewOrder" class="w-full mt-4 py-3 px-4 bg-gray-800 text-white font-bold rounded-lg hover:bg-gray-700 transition-colors">
@@ -794,19 +851,19 @@
         const KitchenView = {
             template: `
                 <div class="p-2">
-                     <div v-if="loading" class="text-center py-20"><i class="ph-duotone ph-spinner-gap animate-spin text-6xl text-emerald-500"></i><p class="mt-4 text-xl text-gray-600">Cargando pedidos...</p></div>
-                    <div v-else-if="activePedidos.length === 0" class="text-center py-20"><i class="ph-duotone ph-coffee text-6xl text-gray-400"></i><p class="mt-4 text-xl text-gray-600">No hay pedidos para preparar.</p></div>
+                     <div v-if="loading" class="text-center py-20"><i class="ph-duotone ph-spinner-gap animate-spin text-6xl text-emerald-500"></i><p class="mt-4 text-xl text-gray-600 dark:text-gray-400">Cargando pedidos...</p></div>
+                    <div v-else-if="activePedidos.length === 0" class="text-center py-20"><i class="ph-duotone ph-coffee text-6xl text-gray-400"></i><p class="mt-4 text-xl text-gray-600 dark:text-gray-400">No hay pedidos para preparar.</p></div>
                     <transition-group v-else name="slide-up" tag="div" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        <div v-for="pedido in activePedidos" :key="pedido.id" class="bg-white rounded-lg shadow-md p-5 flex flex-col">
+                        <div v-for="pedido in activePedidos" :key="pedido.id" class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-5 flex flex-col">
                             <div class="flex justify-between items-start mb-3">
-                                <h3 class="text-xl font-bold text-gray-800">{{ pedido.mesa_nombre }} - #{{ pedido.id }}</h3>
+                                <h3 class="text-xl font-bold text-gray-800 dark:text-gray-100">{{ pedido.mesa_nombre }} - #{{ pedido.id }}</h3>
                                 <span class="text-lg font-bold text-red-600 bg-red-100 px-3 py-1 rounded-full flex items-center gap-1">
                                     <i class="ph-duotone ph-timer"></i>
                                     <span>{{ calculateElapsedTime(pedido.createdAt) }}</span>
                                 </span>
                             </div>
-                            <ul class="flex-1 border-t border-b border-gray-200 py-3 my-3 space-y-2">
-                                <li v-for="detalle in pedido.detalles" :key="detalle.id" class="flex justify-between items-center"><span class="text-gray-700">{{ detalle.producto.nombre }}</span><span class="font-bold text-emerald-600">x {{ detalle.cantidad }}</span></li>
+                            <ul class="flex-1 border-t border-b border-gray-200 dark:border-gray-700 py-3 my-3 space-y-2">
+                                <li v-for="detalle in pedido.detalles" :key="detalle.id" class="flex justify-between items-center"><span class="text-gray-700 dark:text-gray-300">{{ detalle.producto.nombre }}</span><span class="font-bold text-emerald-600 dark:text-emerald-400">x {{ detalle.cantidad }}</span></li>
                             </ul>
                             <button @click="updateOrderStatus(pedido.id, 'listo para entregar')" class="w-full mt-4 bg-green-500 text-white font-bold py-2 rounded-lg hover:bg-green-600 transition-colors">Pedido Listo</button>
                         </div>
@@ -882,8 +939,8 @@
             template: `
                 <div class="p-2 relative">
                     <!-- Contenedor de Pedidos -->
-                    <div v-if="loading" class="text-center py-20"><i class="ph-duotone ph-spinner-gap animate-spin text-6xl text-emerald-500"></i><p class="mt-4 text-xl text-gray-600">Cargando pedidos...</p></div>
-                    <div v-else-if="activePedidos.length === 0" class="text-center py-20"><i class="ph-duotone ph-coffee text-6xl text-gray-400"></i><p class="mt-4 text-xl text-gray-600">No hay pedidos por gestionar.</p></div>
+                    <div v-if="loading" class="text-center py-20"><i class="ph-duotone ph-spinner-gap animate-spin text-6xl text-emerald-500"></i><p class="mt-4 text-xl text-gray-600 dark:text-gray-400">Cargando pedidos...</p></div>
+                    <div v-else-if="activePedidos.length === 0" class="text-center py-20"><i class="ph-duotone ph-coffee text-6xl text-gray-400"></i><p class="mt-4 text-xl text-gray-600 dark:text-gray-400">No hay pedidos por gestionar.</p></div>
                     <transition-group v-else name="slide-up" tag="div" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                         <OrderCard v-for="pedido in activePedidos" :key="pedido.id" :order="pedido" @order-updated="handleOrderUpdate" />
                     </transition-group>
@@ -944,24 +1001,24 @@
 
         const OrdersHistoryView = {
             template: `
-                <div class="bg-white rounded-lg shadow-md p-6">
-                    <div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold text-gray-800">Historial de Pedidos</h2><button @click="fetchPedidos" class="text-emerald-500 hover:text-emerald-700"><i class="ph ph-arrow-clockwise text-2xl"></i></button></div>
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+                    <div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold text-gray-800 dark:text-gray-100">Historial de Pedidos</h2><button @click="fetchPedidos" class="text-emerald-500 hover:text-emerald-700"><i class="ph ph-arrow-clockwise text-2xl"></i></button></div>
                     <div v-if="loading" class="text-center py-10"><i class="ph-duotone ph-spinner-gap animate-spin text-4xl text-emerald-500"></i></div>
-                     <div v-else-if="pedidos.length === 0" class="text-center py-10"><i class="ph-duotone ph-archive text-5xl text-gray-400"></i><p class="mt-2 text-gray-600">Aún no hay pedidos registrados.</p></div>
+                     <div v-else-if="pedidos.length === 0" class="text-center py-10"><i class="ph-duotone ph-archive text-5xl text-gray-400"></i><p class="mt-2 text-gray-600 dark:text-gray-400">Aún no hay pedidos registrados.</p></div>
                     <div v-else class="overflow-x-auto">
                         <table class="w-full text-left">
-                            <thead class="bg-gray-50">
+                            <thead class="bg-gray-50 dark:bg-gray-700/50">
                                 <tr>
-                                    <th class="p-3 text-sm font-semibold text-gray-600">ID</th><th class="p-3 text-sm font-semibold text-gray-600">Mesa/Cliente</th><th class="p-3 text-sm font-semibold text-gray-600">Fecha</th><th class="p-3 text-sm font-semibold text-gray-600">Total</th><th class="p-3 text-sm font-semibold text-gray-600">Estado</th><th class="p-3 text-sm font-semibold text-gray-600">Pago</th>
+                                    <th class="p-3 text-sm font-semibold text-gray-600 dark:text-gray-300">ID</th><th class="p-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Mesa/Cliente</th><th class="p-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Fecha</th><th class="p-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Total</th><th class="p-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Estado</th><th class="p-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Pago</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-gray-200">
-                                <tr v-for="pedido in pedidos" :key="pedido.id" class="hover:bg-gray-50">
-                                    <td class="p-3 text-sm text-gray-700">#{{ pedido.id }}</td><td class="p-3 text-sm text-gray-700 font-medium">{{ pedido.mesa_nombre }}</td><td class="p-3 text-sm text-gray-500">{{ formatDateTime(pedido.createdAt) }}</td><td class="p-3 text-sm text-gray-800 font-bold">{{ formatCurrency(pedido.total) }}</td>
+                            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                                <tr v-for="pedido in pedidos" :key="pedido.id" class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                    <td class="p-3 text-sm text-gray-700 dark:text-gray-300">#{{ pedido.id }}</td><td class="p-3 text-sm text-gray-700 dark:text-gray-300 font-medium">{{ pedido.mesa_nombre }}</td><td class="p-3 text-sm text-gray-500 dark:text-gray-400">{{ formatDateTime(pedido.createdAt) }}</td><td class="p-3 text-sm text-gray-800 dark:text-gray-100 font-bold">{{ formatCurrency(pedido.total) }}</td>
                                     <td class="p-3 text-sm"><span :class="getStatusClass(pedido.estado)" class="px-2 py-1 rounded-full text-xs font-medium capitalize">{{ pedido.estado.replace('_', ' ') }}</span></td>
                                     <td class="p-3 text-sm">
-                                        <span v-if="pedido.pagado" class="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Pagado</span>
-                                        <span v-else class="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Pendiente</span>
+                                        <span v-if="pedido.pagado" class="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">Pagado</span>
+                                        <span v-else class="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300">Pendiente</span>
                                     </td>
                                 </tr>
                             </tbody>
@@ -985,11 +1042,11 @@
                 const formatDateTime = (dateString) => new Date(dateString).toLocaleString('es-MX');
                 const getStatusClass = (estado) => {
                     const classes = {
-                        'en validacion': 'bg-gray-100 text-gray-800', 'en preparacion': 'bg-yellow-100 text-yellow-800',
-                        'listo para entregar': 'bg-blue-100 text-blue-800', 'entregado': 'bg-purple-100 text-purple-800',
-                        'cancelado': 'bg-red-100 text-red-800'
+                        'en validacion': 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200', 'en preparacion': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300',
+                        'listo para entregar': 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300', 'entregado': 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300',
+                        'cancelado': 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300'
                     };
-                    return classes[estado] || 'bg-gray-100 text-gray-800';
+                    return classes[estado] || 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
                 };
                 onMounted(fetchPedidos);
                 return { pedidos, loading, fetchPedidos, formatCurrency, formatDateTime, getStatusClass };
@@ -1005,41 +1062,41 @@
                         <div v-if="loading" class="text-center py-20">
                             <i class="ph-duotone ph-spinner-gap animate-spin text-5xl text-emerald-500"></i>
                         </div>
-                        <div v-else-if="!cart.consumerOrderId" class="text-center py-20 bg-white rounded-lg shadow-sm">
-                            <i class="ph-duotone ph-receipt text-6xl text-gray-300"></i>
-                            <h2 class="mt-4 text-2xl font-bold text-gray-700">No tienes un pedido activo</h2>
-                            <p class="text-gray-500 mt-2">Una vez que ordenes, podrás ver el estado aquí.</p>
+                        <div v-else-if="!cart.consumerOrderId" class="text-center py-20 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+                            <i class="ph-duotone ph-receipt text-6xl text-gray-300 dark:text-gray-600"></i>
+                            <h2 class="mt-4 text-2xl font-bold text-gray-700 dark:text-gray-200">No tienes un pedido activo</h2>
+                            <p class="text-gray-500 dark:text-gray-400 mt-2">Una vez que ordenes, podrás ver el estado aquí.</p>
                             <router-link to="/" class="mt-6 inline-block bg-emerald-500 text-white font-bold py-2 px-6 rounded-lg">
                                 Empezar a Ordenar
                             </router-link>
                         </div>
-                        <div v-else-if="error" class="text-center py-20 bg-white rounded-lg shadow-sm">
+                        <div v-else-if="error" class="text-center py-20 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
                             <i class="ph-duotone ph-x-circle text-6xl text-red-400"></i>
-                            <h2 class="mt-4 text-2xl font-bold text-gray-700">No se encontró tu pedido</h2>
-                            <p class="text-gray-500 mt-2">{{ error }}</p>
+                            <h2 class="mt-4 text-2xl font-bold text-gray-700 dark:text-gray-200">No se encontró tu pedido</h2>
+                            <p class="text-gray-500 dark:text-gray-400 mt-2">{{ error }}</p>
                             <button @click="startNewOrder" class="mt-6 inline-block bg-gray-600 text-white font-bold py-2 px-6 rounded-lg">
                                 Limpiar y ordenar de nuevo
                             </button>
                         </div>
-                        <div v-else-if="pedido" class="bg-white rounded-lg shadow-md p-6">
-                            <div class="text-center border-b pb-4 mb-4">
-                                <p class="text-sm text-gray-500">ID de tu Pedido</p>
-                                <h2 class="text-3xl font-bold text-emerald-600">#{{ pedido.id }}</h2>
+                        <div v-else-if="pedido" class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+                            <div class="text-center border-b dark:border-gray-700 pb-4 mb-4">
+                                <p class="text-sm text-gray-500 dark:text-gray-400">ID de tu Pedido</p>
+                                <h2 class="text-3xl font-bold text-emerald-600 dark:text-emerald-400">#{{ pedido.id }}</h2>
                             </div>
                             <div class="text-center my-8">
-                                <p class="text-sm text-gray-500">Estado Actual</p>
+                                <p class="text-sm text-gray-500 dark:text-gray-400">Estado Actual</p>
                                 <div class="mt-2 inline-flex items-center gap-3 px-6 py-3 rounded-full text-2xl font-bold" :class="statusInfo.class">
                                     <i :class="statusInfo.icon"></i>
                                     <span>{{ statusInfo.text }}</span>
                                 </div>
                             </div>
                             <ul class="space-y-2 mb-6">
-                                <li v-for="detalle in pedido.detalles" :key="detalle.id" class="flex justify-between items-center text-gray-700">
+                                <li v-for="detalle in pedido.detalles" :key="detalle.id" class="flex justify-between items-center text-gray-700 dark:text-gray-300">
                                     <span>{{ detalle.cantidad }}x {{ detalle.producto.nombre }}</span>
                                     <span class="font-medium">{{ formatCurrency(detalle.cantidad * detalle.precio_unitario) }}</span>
                                 </li>
                             </ul>
-                            <div class="border-t pt-4 flex justify-between text-xl font-bold">
+                            <div class="border-t dark:border-gray-700 pt-4 flex justify-between text-xl font-bold dark:text-gray-100">
                                 <span>Total:</span>
                                 <span>{{ formatCurrency(pedido.total) }}</span>
                             </div>
@@ -1083,15 +1140,15 @@
                 const statusInfo = computed(() => {
                     if (!pedido.value) return {};
                     if (pedido.value.estado === 'entregado' && pedido.value.pagado) {
-                         return { text: '¡Buen provecho!', icon: 'ph-duotone ph-check-circle', class: 'bg-green-100 text-green-800' };
+                         return { text: '¡Buen provecho!', icon: 'ph-duotone ph-check-circle', class: 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300' };
                     }
                     switch(pedido.value.estado) {
-                        case 'en validacion': return { text: 'Validando Pedido', icon: 'ph-duotone ph-question', class: 'bg-gray-100 text-gray-800' };
-                        case 'en preparacion': return { text: 'En preparación', icon: 'ph-duotone ph-fire', class: 'bg-yellow-100 text-yellow-800' };
-                        case 'listo para entregar': return { text: '¡Listo para entregar!', icon: 'ph-duotone ph-bell', class: 'bg-blue-100 text-blue-800' };
-                        case 'entregado': return { text: 'Pedido Entregado (Pendiente de pago)', icon: 'ph-duotone ph-smiley', class: 'bg-purple-100 text-purple-800' };
-                        case 'cancelado': return { text: 'Cancelado', icon: 'ph-duotone ph-x-circle', class: 'bg-red-100 text-red-800' };
-                        default: return { text: 'Desconocido', icon: 'ph-duotone ph-question', class: 'bg-gray-100 text-gray-800' };
+                        case 'en validacion': return { text: 'Validando Pedido', icon: 'ph-duotone ph-question', class: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200' };
+                        case 'en preparacion': return { text: 'En preparación', icon: 'ph-duotone ph-fire', class: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300' };
+                        case 'listo para entregar': return { text: '¡Listo para entregar!', icon: 'ph-duotone ph-bell', class: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300' };
+                        case 'entregado': return { text: 'Pedido Entregado (Pendiente de pago)', icon: 'ph-duotone ph-smiley', class: 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300' };
+                        case 'cancelado': return { text: 'Cancelado', icon: 'ph-duotone ph-x-circle', class: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300' };
+                        default: return { text: 'Desconocido', icon: 'ph-duotone ph-question', class: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200' };
                     }
                 });
                 const startNewOrder = () => {
@@ -1131,49 +1188,49 @@
             template: `
                 <div v-if="loading" class="text-center py-20">
                     <i class="ph-duotone ph-spinner-gap animate-spin text-5xl text-emerald-500"></i>
-                    <p class="mt-4 text-gray-600">Cargando estadísticas...</p>
+                    <p class="mt-4 text-gray-600 dark:text-gray-400">Cargando estadísticas...</p>
                 </div>
                 <div v-else-if="stats" class="space-y-6">
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div class="bg-white p-6 rounded-lg shadow-md flex items-center gap-4">
+                        <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md flex items-center gap-4">
                             <i class="ph-duotone ph-chart-bar text-4xl text-blue-500"></i>
                             <div>
-                                <p class="text-sm text-gray-500">Ventas Totales</p>
-                                <p class="text-2xl font-bold text-gray-800">{{ formatCurrency(stats.totalSales) }}</p>
+                                <p class="text-sm text-gray-500 dark:text-gray-400">Ventas Totales</p>
+                                <p class="text-2xl font-bold text-gray-800 dark:text-gray-100">{{ formatCurrency(stats.totalSales) }}</p>
                             </div>
                         </div>
-                        <div class="bg-white p-6 rounded-lg shadow-md flex items-center gap-4">
+                        <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md flex items-center gap-4">
                             <i class="ph-duotone ph-sun text-4xl text-yellow-500"></i>
                             <div>
-                                <p class="text-sm text-gray-500">Ventas de Hoy</p>
-                                <p class="text-2xl font-bold text-gray-800">{{ formatCurrency(stats.todaySales) }}</p>
+                                <p class="text-sm text-gray-500 dark:text-gray-400">Ventas de Hoy</p>
+                                <p class="text-2xl font-bold text-gray-800 dark:text-gray-100">{{ formatCurrency(stats.todaySales) }}</p>
                             </div>
                         </div>
-                        <div class="bg-white p-6 rounded-lg shadow-md flex items-center gap-4">
+                        <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md flex items-center gap-4">
                             <i class="ph-duotone ph-receipt text-4xl text-green-500"></i>
                             <div>
-                                <p class="text-sm text-gray-500">Pedidos de Hoy</p>
-                                <p class="text-2xl font-bold text-gray-800">{{ stats.todayOrdersCount }}</p>
+                                <p class="text-sm text-gray-500 dark:text-gray-400">Pedidos de Hoy</p>
+                                <p class="text-2xl font-bold text-gray-800 dark:text-gray-100">{{ stats.todayOrdersCount }}</p>
                             </div>
                         </div>
                     </div>
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-md">
-                            <h3 class="font-semibold mb-4">Ventas de los Últimos 7 Días</h3>
+                        <div class="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+                            <h3 class="font-semibold mb-4 dark:text-gray-200">Ventas de los Últimos 7 Días</h3>
                             <canvas ref="salesChartCanvas"></canvas>
                         </div>
-                        <div class="bg-white p-6 rounded-lg shadow-md">
-                            <h3 class="font-semibold mb-4">Productos Más Vendidos</h3>
+                        <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+                            <h3 class="font-semibold mb-4 dark:text-gray-200">Productos Más Vendidos</h3>
                             <ul v-if="stats.topSellingProducts.length > 0" class="space-y-3">
                                 <li v-for="(item, index) in stats.topSellingProducts" :key="item.productoId" class="flex items-center justify-between">
                                     <div class="flex items-center gap-3">
                                         <span class="font-bold text-gray-400">{{ index + 1 }}</span>
-                                        <span class="text-gray-700">{{ item.producto ? item.producto.nombre : 'Producto no disponible' }}</span>
+                                        <span class="text-gray-700 dark:text-gray-300">{{ item.producto ? item.producto.nombre : 'Producto no disponible' }}</span>
                                     </div>
-                                    <span class="font-bold bg-gray-100 px-2 py-1 rounded">{{ item.totalVendido }}</span>
+                                    <span class="font-bold bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">{{ item.totalVendido }}</span>
                                 </li>
                             </ul>
-                            <p v-else class="text-gray-500 text-center py-8">No hay datos de ventas.</p>
+                            <p v-else class="text-gray-500 dark:text-gray-400 text-center py-8">No hay datos de ventas.</p>
                         </div>
                     </div>
                 </div>`,
@@ -1181,7 +1238,31 @@
                 const loading = ref(true);
                 const stats = ref(null);
                 const salesChartCanvas = ref(null);
+                const themeStore = useThemeStore();
                 let chartInstance = null;
+                
+                const getChartOptions = () => {
+                    const isDark = themeStore.theme === 'dark';
+                    return {
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: { color: isDark ? '#9ca3af' : '#6b7280' },
+                                grid: { color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)' }
+                            },
+                            x: {
+                                ticks: { color: isDark ? '#9ca3af' : '#6b7280' },
+                                grid: { color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)' }
+                            }
+                        },
+                        plugins: {
+                            legend: { labels: { color: isDark ? '#e5e7eb' : '#374151' } }
+                        },
+                        responsive: true,
+                        maintainAspectRatio: false
+                    };
+                };
+
                 const renderChart = () => {
                     if (chartInstance) {
                         chartInstance.destroy();
@@ -1200,7 +1281,7 @@
                                     borderWidth: 1
                                 }]
                             },
-                            options: { scales: { y: { beginAtZero: true } }, responsive: true, maintainAspectRatio: false }
+                            options: getChartOptions()
                         });
                     }
                 };
@@ -1220,6 +1301,7 @@
                 };
 
                 onMounted(fetchStats);
+                watch(() => themeStore.theme, renderChart);
                 onBeforeUnmount(() => { if (chartInstance) chartInstance.destroy(); });
 
                 return { loading, stats, salesChartCanvas, formatCurrency };
@@ -1228,9 +1310,9 @@
 
         const UserManagementView = {
             template: `
-                <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
                     <div class="flex justify-between items-center mb-6">
-                        <h2 class="text-2xl font-bold text-gray-800">Gestión de Usuarios</h2>
+                        <h2 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Gestión de Usuarios</h2>
                         <button @click="openModal()" class="bg-emerald-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-emerald-600">
                             <i class="ph ph-plus"></i>
                             Añadir Usuario
@@ -1240,19 +1322,19 @@
                     <div v-if="loading" class="text-center py-10"><i class="ph-duotone ph-spinner-gap animate-spin text-4xl text-emerald-500"></i></div>
                     <div v-else class="overflow-x-auto">
                         <table class="w-full text-left">
-                            <thead class="bg-gray-50">
+                            <thead class="bg-gray-50 dark:bg-gray-700/50">
                                 <tr>
-                                    <th class="p-3 text-sm font-semibold text-gray-600">Nombre</th>
-                                    <th class="p-3 text-sm font-semibold text-gray-600">Username</th>
-                                    <th class="p-3 text-sm font-semibold text-gray-600">Rol</th>
-                                    <th class="p-3 text-sm font-semibold text-gray-600 text-right">Acciones</th>
+                                    <th class="p-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Nombre</th>
+                                    <th class="p-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Username</th>
+                                    <th class="p-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Rol</th>
+                                    <th class="p-3 text-sm font-semibold text-gray-600 dark:text-gray-300 text-right">Acciones</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-gray-200">
-                                <tr v-for="user in users" :key="user.id" class="hover:bg-gray-50">
-                                    <td class="p-3 text-sm text-gray-700 font-medium">{{ user.nombre }}</td>
-                                    <td class="p-3 text-sm text-gray-500">{{ user.username }}</td>
-                                    <td class="p-3 text-sm text-gray-700 capitalize">{{ user.role }}</td>
+                            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                                <tr v-for="user in users" :key="user.id" class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                    <td class="p-3 text-sm text-gray-700 dark:text-gray-300 font-medium">{{ user.nombre }}</td>
+                                    <td class="p-3 text-sm text-gray-500 dark:text-gray-400">{{ user.username }}</td>
+                                    <td class="p-3 text-sm text-gray-700 dark:text-gray-300 capitalize">{{ user.role }}</td>
                                     <td class="p-3 text-sm text-right">
                                         <button @click="openModal(user)" class="text-blue-500 hover:text-blue-700 mr-4">Editar</button>
                                         <button @click="confirmDelete(user)" class="text-red-500 hover:text-red-700" :disabled="isCurrentUser(user.id)">Eliminar</button>
@@ -1265,31 +1347,31 @@
 
                 <!-- Modal para crear/editar usuario -->
                 <div v-if="isModalOpen" @click.self="closeModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div class="w-full max-w-md bg-white rounded-lg shadow-md p-8">
-                        <h3 class="text-2xl font-bold mb-6">{{ isEditMode ? 'Editar Usuario' : 'Añadir Usuario' }}</h3>
+                    <div class="w-full max-w-md bg-white dark:bg-gray-800 rounded-lg shadow-md p-8">
+                        <h3 class="text-2xl font-bold mb-6 dark:text-gray-100">{{ isEditMode ? 'Editar Usuario' : 'Añadir Usuario' }}</h3>
                         <form @submit.prevent="handleSubmit">
                             <div class="mb-4">
-                                <label for="nombre" class="block text-sm font-medium text-gray-700">Nombre Completo</label>
-                                <input v-model="currentUser.nombre" type="text" id="nombre" class="mt-1 block w-full" required>
+                                <label for="nombre" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre Completo</label>
+                                <input v-model="currentUser.nombre" type="text" id="nombre" class="mt-1 block w-full dark:bg-gray-700 dark:border-gray-600 dark:text-white" required>
                             </div>
                             <div class="mb-4">
-                                <label for="username" class="block text-sm font-medium text-gray-700">Username</label>
-                                <input v-model="currentUser.username" type="text" id="username" class="mt-1 block w-full" required>
+                                <label for="username" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Username</label>
+                                <input v-model="currentUser.username" type="text" id="username" class="mt-1 block w-full dark:bg-gray-700 dark:border-gray-600 dark:text-white" required>
                             </div>
                             <div class="mb-4">
-                                <label for="password" class="block text-sm font-medium text-gray-700">Contraseña</label>
-                                <input v-model="currentUser.password" type="password" id="password" class="mt-1 block w-full" :placeholder="isEditMode ? 'Dejar en blanco para no cambiar' : ''" :required="!isEditMode">
+                                <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Contraseña</label>
+                                <input v-model="currentUser.password" type="password" id="password" class="mt-1 block w-full dark:bg-gray-700 dark:border-gray-600 dark:text-white" :placeholder="isEditMode ? 'Dejar en blanco para no cambiar' : ''" :required="!isEditMode">
                             </div>
                             <div class="mb-6">
-                                <label for="role" class="block text-sm font-medium text-gray-700">Rol</label>
-                                <select v-model="currentUser.role" id="role" class="mt-1 block w-full" required>
+                                <label for="role" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Rol</label>
+                                <select v-model="currentUser.role" id="role" class="mt-1 block w-full dark:bg-gray-700 dark:border-gray-600 dark:text-white" required>
                                     <option value="mesero">Mesero</option>
                                     <option value="cocinero">Cocinero</option>
                                     <option value="administrador">Administrador</option>
                                 </select>
                             </div>
                             <div class="flex justify-end gap-4">
-                                <button type="button" @click="closeModal" class="px-4 py-2 bg-gray-200 rounded-lg">Cancelar</button>
+                                <button type="button" @click="closeModal" class="px-4 py-2 bg-gray-200 dark:bg-gray-600 dark:text-gray-200 rounded-lg">Cancelar</button>
                                 <button type="submit" class="px-4 py-2 bg-emerald-500 text-white rounded-lg">{{ isEditMode ? 'Guardar Cambios' : 'Crear Usuario' }}</button>
                             </div>
                         </form>
@@ -1382,17 +1464,17 @@
             template: `
                 <div class="space-y-8">
                     <!-- Sección de Gestión de Categorías -->
-                    <div class="bg-white p-6 rounded-lg shadow-md">
+                    <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
                         <div class="flex justify-between items-center mb-4">
-                            <h2 class="text-2xl font-bold text-gray-800">Categorías</h2>
+                            <h2 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Categorías</h2>
                             <button @click="openCategoryModal()" class="bg-emerald-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-emerald-600">
                                 <i class="ph ph-plus"></i> Añadir Categoría
                             </button>
                         </div>
                         <ul class="space-y-2">
-                            <li v-for="cat in categories" :key="cat.id" class="flex justify-between items-center p-3 rounded-lg" :class="cat.visible ? 'bg-gray-50' : 'bg-red-50'">
+                            <li v-for="cat in categories" :key="cat.id" class="flex justify-between items-center p-3 rounded-lg" :class="cat.visible ? 'bg-gray-50 dark:bg-gray-700/50' : 'bg-red-50 dark:bg-red-900/20'">
                                 <div>
-                                    <span class="font-medium" :class="{'text-gray-400 line-through': !cat.visible}">{{ cat.nombre }}</span>
+                                    <span class="font-medium dark:text-gray-300" :class="{'text-gray-400 dark:text-gray-500 line-through': !cat.visible}">{{ cat.nombre }}</span>
                                     <span v-if="!cat.visible" class="text-xs text-red-600 font-semibold ml-2">OCULTO</span>
                                 </div>
                                 <div class="space-x-2">
@@ -1405,34 +1487,34 @@
                     </div>
 
                     <!-- Sección de Gestión de Productos -->
-                    <div class="bg-white p-6 rounded-lg shadow-md">
+                    <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
                         <div class="flex justify-between items-center mb-4">
-                            <h2 class="text-2xl font-bold text-gray-800">Productos</h2>
+                            <h2 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Productos</h2>
                             <button @click="openProductModal()" class="bg-emerald-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-emerald-600">
                                 <i class="ph ph-plus"></i> Añadir Producto
                             </button>
                         </div>
                         <div class="overflow-x-auto">
                             <table class="w-full text-left">
-                                <thead class="bg-gray-50">
+                                <thead class="bg-gray-50 dark:bg-gray-700/50">
                                     <tr>
-                                        <th class="p-3 text-sm font-semibold text-gray-600">Producto</th>
-                                        <th class="p-3 text-sm font-semibold text-gray-600">Categoría</th>
-                                        <th class="p-3 text-sm font-semibold text-gray-600">Precio</th>
-                                        <th class="p-3 text-sm font-semibold text-gray-600">Estado</th>
-                                        <th class="p-3 text-sm font-semibold text-gray-600 text-right">Acciones</th>
+                                        <th class="p-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Producto</th>
+                                        <th class="p-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Categoría</th>
+                                        <th class="p-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Precio</th>
+                                        <th class="p-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Estado</th>
+                                        <th class="p-3 text-sm font-semibold text-gray-600 dark:text-gray-300 text-right">Acciones</th>
                                     </tr>
                                 </thead>
-                                <tbody class="divide-y divide-gray-200">
-                                    <tr v-for="prod in products" :key="prod.id" class="hover:bg-gray-50" :class="{'opacity-50': !prod.visible}">
-                                        <td class="p-3 font-medium flex items-center gap-3">
+                                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                                    <tr v-for="prod in products" :key="prod.id" class="hover:bg-gray-50 dark:hover:bg-gray-700/50" :class="{'opacity-50': !prod.visible}">
+                                        <td class="p-3 font-medium flex items-center gap-3 text-gray-800 dark:text-gray-200">
                                             <img :src="prod.imagen_url || 'https://placehold.co/40x40/e2e8f0/64748b?text=??'" class="w-10 h-10 rounded-md object-cover">
                                             <span>{{ prod.nombre }}</span>
                                         </td>
-                                        <td class="p-3 text-sm text-gray-500">{{ prod.categoria ? prod.categoria.nombre : 'N/A' }}</td>
-                                        <td class="p-3 text-sm text-gray-800 font-semibold">{{ formatCurrency(prod.precio) }}</td>
+                                        <td class="p-3 text-sm text-gray-500 dark:text-gray-400">{{ prod.categoria ? prod.categoria.nombre : 'N/A' }}</td>
+                                        <td class="p-3 text-sm text-gray-800 dark:text-gray-100 font-semibold">{{ formatCurrency(prod.precio) }}</td>
                                         <td class="p-3 text-sm">
-                                            <span class="px-2 py-1 rounded-full text-xs font-medium" :class="prod.visible ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'">
+                                            <span class="px-2 py-1 rounded-full text-xs font-medium" :class="prod.visible ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300' : 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300'">
                                                 {{ prod.visible ? 'Visible' : 'Oculto' }}
                                             </span>
                                         </td>
@@ -1449,15 +1531,15 @@
 
                     <!-- Modal para Categorías -->
                     <div v-if="categoryModal.isOpen" @click.self="closeCategoryModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                        <div class="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
-                            <h3 class="text-2xl font-bold mb-6">{{ categoryModal.isEdit ? 'Editar' : 'Nueva' }} Categoría</h3>
+                        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-8 w-full max-w-md">
+                            <h3 class="text-2xl font-bold mb-6 dark:text-gray-100">{{ categoryModal.isEdit ? 'Editar' : 'Nueva' }} Categoría</h3>
                             <form @submit.prevent="handleCategorySubmit">
                                 <div class="mb-4">
-                                    <label for="cat-nombre" class="block text-sm font-medium text-gray-700">Nombre</label>
-                                    <input v-model="categoryModal.current.nombre" id="cat-nombre" type="text" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm" required>
+                                    <label for="cat-nombre" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre</label>
+                                    <input v-model="categoryModal.current.nombre" id="cat-nombre" type="text" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md shadow-sm" required>
                                 </div>
                                 <div class="flex justify-end gap-4 mt-8">
-                                    <button type="button" @click="closeCategoryModal" class="px-4 py-2 bg-gray-200 rounded-lg">Cancelar</button>
+                                    <button type="button" @click="closeCategoryModal" class="px-4 py-2 bg-gray-200 dark:bg-gray-600 dark:text-gray-200 rounded-lg">Cancelar</button>
                                     <button type="submit" class="px-4 py-2 bg-emerald-500 text-white rounded-lg">Guardar</button>
                                 </div>
                             </form>
@@ -1466,25 +1548,25 @@
 
                     <!-- Modal para Productos -->
                     <div v-if="productModal.isOpen" @click.self="closeProductModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                        <div class="bg-white rounded-lg shadow-xl p-8 w-full max-w-lg">
-                            <h3 class="text-2xl font-bold mb-6">{{ productModal.isEdit ? 'Editar' : 'Nuevo' }} Producto</h3>
+                        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-8 w-full max-w-lg">
+                            <h3 class="text-2xl font-bold mb-6 dark:text-gray-100">{{ productModal.isEdit ? 'Editar' : 'Nuevo' }} Producto</h3>
                             <form @submit.prevent="handleProductSubmit" class="space-y-4">
-                                <input v-model="productModal.current.nombre" type="text" placeholder="Nombre del producto" class="w-full border-gray-300 rounded-md shadow-sm" required>
-                                <textarea v-model="productModal.current.descripcion" placeholder="Descripción" class="w-full border-gray-300 rounded-md shadow-sm" rows="3"></textarea>
-                                <input v-model="productModal.current.precio" type="number" step="0.01" placeholder="Precio" class="w-full border-gray-300 rounded-md shadow-sm" required>
-                                <select v-model="productModal.current.categoriaId" class="w-full border-gray-300 rounded-md shadow-sm" required>
+                                <input v-model="productModal.current.nombre" type="text" placeholder="Nombre del producto" class="w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md shadow-sm" required>
+                                <textarea v-model="productModal.current.descripcion" placeholder="Descripción" class="w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md shadow-sm" rows="3"></textarea>
+                                <input v-model="productModal.current.precio" type="number" step="0.01" placeholder="Precio" class="w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md shadow-sm" required>
+                                <select v-model="productModal.current.categoriaId" class="w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md shadow-sm" required>
                                     <option :value="null" disabled>Selecciona una categoría</option>
                                     <option v-for="cat in categories.filter(c => c.visible)" :key="cat.id" :value="cat.id">{{ cat.nombre }}</option>
                                 </select>
                                 <div>
-                                    <label for="prod-imagen" class="block text-sm font-medium text-gray-700">Imagen del Producto</label>
-                                    <input @change="handleImageUpload" id="prod-imagen" type="file" accept="image/*" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100">
-                                    <div v-if="imagePreviewUrl || productModal.current.imagen_url" class="mt-4 border rounded-md p-2 inline-block">
+                                    <label for="prod-imagen" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Imagen del Producto</label>
+                                    <input @change="handleImageUpload" id="prod-imagen" type="file" accept="image/*" class="mt-1 block w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 dark:file:bg-emerald-900/50 file:text-emerald-700 dark:file:text-emerald-300 hover:file:bg-emerald-100 dark:hover:file:bg-emerald-800/50">
+                                    <div v-if="imagePreviewUrl || productModal.current.imagen_url" class="mt-4 border dark:border-gray-600 rounded-md p-2 inline-block">
                                         <img :src="imagePreviewUrl || productModal.current.imagen_url" class="w-32 h-32 object-cover rounded-md">
                                     </div>
                                 </div>
                                 <div class="flex justify-end gap-4 pt-4">
-                                    <button type="button" @click="closeProductModal" class="px-4 py-2 bg-gray-200 rounded-lg">Cancelar</button>
+                                    <button type="button" @click="closeProductModal" class="px-4 py-2 bg-gray-200 dark:bg-gray-600 dark:text-gray-200 rounded-lg">Cancelar</button>
                                     <button type="submit" class="px-4 py-2 bg-emerald-500 text-white rounded-lg">Guardar</button>
                                 </div>
                             </form>
@@ -1610,62 +1692,173 @@
             }
         };
 
+        const SettingsView = {
+            template: `
+                <div class="p-4 max-w-2xl mx-auto">
+                    <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+                        <h2 class="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-1">Configuración de Conexión</h2>
+                        <p class="text-gray-500 dark:text-gray-400 mb-6">Define los datos para que los clientes se conecten a la red y al menú.</p>
+                        
+                        <form @submit.prevent="handleSave" class="space-y-4">
+                            <div>
+                                <label for="ssid" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre de la Red (SSID)</label>
+                                <input v-model="form.ssid" type="text" id="ssid" class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 dark:text-white" placeholder="NombreDeTuWiFi" required>
+                            </div>
+                            <div>
+                                <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Contraseña de la Red</label>
+                                <input v-model="form.password" type="password" id="password" class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 dark:text-white" placeholder="Contraseña">
+                            </div>
+
+                            <div class="border-t dark:border-gray-700 pt-4">
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">URL del Menú para Clientes</label>
+                                <p class="text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 p-2 rounded-md mt-1 break-all">{{ webUrl }}</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Este es el enlace que se usará para el código QR del menú.</p>
+                            </div>
+
+                            <div class="flex justify-end pt-4">
+                                <button type="submit" class="bg-emerald-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-emerald-600">
+                                    Guardar Configuración
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `,
+            setup() {
+                const settingsStore = useSettingsStore();
+                const form = ref({
+                    ssid: settingsStore.ssid,
+                    password: settingsStore.password
+                });
+                const webUrl = `http://${window.location.hostname}:3000`;
+
+                const handleSave = () => {
+                    settingsStore.saveSettings(form.value.ssid, form.value.password);
+                    alert('¡Configuración guardada!');
+                };
+
+                return { form, webUrl, handleSave };
+            }
+        };
+
+        const QRView = {
+            template: `
+                <div class="p-4 space-y-8 max-w-4xl mx-auto">
+                    <div v-if="settings.ssid" class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md text-center">
+                            <h3 class="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">QR para Conexión WiFi</h3>
+                            <canvas ref="wifiCanvas"></canvas>
+                        </div>
+                        <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md text-center">
+                            <h3 class="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">QR para Abrir el Menú</h3>
+                            <canvas ref="urlCanvas"></canvas>
+                            <p class="text-gray-600 dark:text-gray-300 mt-4 break-all">Apunta a: <strong class="text-emerald-600 dark:text-emerald-400">{{ webUrl }}</strong></p>
+                        </div>
+                    </div>
+                    <div v-else class="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-md text-center">
+                         <i class="ph-duotone ph-wifi-slash text-6xl text-amber-500"></i>
+                         <h2 class="mt-4 text-2xl font-bold text-gray-700 dark:text-gray-200">Sin Configuración</h2>
+                         <p class="text-gray-500 dark:text-gray-400 mt-2">Un administrador necesita configurar el nombre y la contraseña de la red WiFi en la pestaña de "Configuración" para poder generar los códigos QR.</p>
+                    </div>
+                </div>
+            `,
+            setup() {
+                const settings = useSettingsStore();
+                const wifiCanvas = ref(null);
+                const urlCanvas = ref(null);
+                const webUrl = `http://${window.location.hostname}:3000`;
+
+                const generateQRCodes = () => {
+                    nextTick(() => {
+                        // Generar QR de WiFi
+                        if (settings.ssid && wifiCanvas.value) {
+                            const wifiString = `WIFI:S:${settings.ssid};T:WPA;P:${settings.password};;`;
+                            QRCode.toCanvas(wifiCanvas.value, wifiString, { width: 256, margin: 2 }, (error) => {
+                                if (error) console.error('Error generando QR de WiFi:', error);
+                            });
+                        }
+
+                        // Generar QR de URL
+                        if (urlCanvas.value) {
+                            QRCode.toCanvas(urlCanvas.value, webUrl, { width: 256, margin: 2 }, (error) => {
+                                if (error) console.error('Error generando QR de URL:', error);
+                            });
+                        }
+                    });
+                };
+
+                onMounted(generateQRCodes);
+                watch(() => [settings.ssid, settings.password], generateQRCodes);
+
+                return { settings, wifiCanvas, urlCanvas, webUrl };
+            }
+        };
+
         // --- ROUTER ---
         const MainLayout = {
             components: { LoginModal },
             template: `
                 <div class="flex flex-col h-screen">
-                    <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0">
+                    <header class="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-6 shrink-0">
                         <div class="flex items-center gap-3">
                             <i class="ph-duotone ph-storefront text-3xl text-emerald-500"></i>
-                            <h1 class="text-xl font-semibold text-gray-800">{{ $route.meta.title }}</h1>
+                            <h1 class="text-xl font-semibold text-gray-800 dark:text-gray-100">{{ $route.meta.title }}</h1>
                         </div>
+                        <button @click="theme.toggleTheme()" class="text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 p-2 rounded-full">
+                            <i v-if="theme.theme === 'light'" class="ph-duotone ph-moon text-2xl"></i>
+                            <i v-else class="ph-duotone ph-sun text-2xl"></i>
+                        </button>
                     </header>
-                    <!-- CONTENEDOR PRINCIPAL: Se ha añadido un padding inferior (pb-28) para dejar espacio para la barra de navegación fija -->
                     <main class="flex-1 overflow-y-auto p-4 pb-28">
                         <router-view v-slot="{ Component }"><transition name="fade" mode="out-in"><component :is="Component" /></transition></router-view>
                     </main>
-                    <nav class="fixed bottom-0 left-0 right-0 h-20 bg-white border-t border-gray-200 shadow-lg flex justify-around items-center z-10">
+                    <nav class="fixed bottom-0 left-0 right-0 h-20 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg flex justify-around items-center z-10">
                         <template v-if="!auth.isAuthenticated">
-                            <router-link to="/" class="bottom-nav-link flex flex-col items-center text-gray-600">
+                            <router-link to="/" class="bottom-nav-link flex flex-col items-center text-gray-600 dark:text-gray-300">
                                 <i class="ph-duotone ph-cooking-pot text-3xl"></i><span class="text-xs font-medium">Ordenar</span>
                             </router-link>
-                            <router-link to="/mi-pedido" class="bottom-nav-link relative flex flex-col items-center text-gray-600">
+                            <router-link to="/mi-pedido" class="bottom-nav-link relative flex flex-col items-center text-gray-600 dark:text-gray-300">
                                 <span v-if="cart.totalItems > 0" class="absolute top-1 right-1/2 transform translate-x-3 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
                                     {{ cart.totalItems }}
                                 </span>
                                 <i class="ph-duotone ph-receipt text-3xl"></i><span class="text-xs font-medium">Mi Pedido</span>
                             </router-link>
-                            <button @click="auth.openLoginModal()" class="bottom-nav-link flex flex-col items-center text-gray-600">
+                            <button @click="auth.openLoginModal()" class="bottom-nav-link flex flex-col items-center text-gray-600 dark:text-gray-300">
                                 <i class="ph-duotone ph-user-circle text-3xl"></i><span class="text-xs font-medium">Staff</span>
                             </button>
                         </template>
                         <template v-else>
-                             <router-link v-if="auth.hasRole(['administrador'])" to="/dashboard" class="bottom-nav-link flex flex-col items-center text-gray-600">
+                             <router-link v-if="auth.hasRole(['administrador'])" to="/dashboard" class="bottom-nav-link flex flex-col items-center text-gray-600 dark:text-gray-300">
                                 <i class="ph-duotone ph-gauge text-3xl"></i><span class="text-xs font-medium">Dashboard</span>
                             </router-link>
-                             <router-link v-if="auth.hasRole(['administrador'])" to="/menu-admin" class="bottom-nav-link flex flex-col items-center text-gray-600">
+                             <router-link v-if="auth.hasRole(['administrador'])" to="/menu-admin" class="bottom-nav-link flex flex-col items-center text-gray-600 dark:text-gray-300">
                                 <i class="ph-duotone ph-list-dashes text-3xl"></i><span class="text-xs font-medium">Menú</span>
                             </router-link>
-                             <router-link v-if="auth.hasRole(['administrador'])" to="/users" class="bottom-nav-link flex flex-col items-center text-gray-600">
+                             <router-link v-if="auth.hasRole(['administrador'])" to="/users" class="bottom-nav-link flex flex-col items-center text-gray-600 dark:text-gray-300">
                                 <i class="ph-duotone ph-users-three text-3xl"></i><span class="text-xs font-medium">Usuarios</span>
                             </router-link>
-                            <router-link v-if="auth.hasRole(['mesero', 'administrador'])" to="/mesero" class="bottom-nav-link flex flex-col items-center text-gray-600">
+                             <router-link v-if="auth.hasRole(['administrador'])" to="/configuracion" class="bottom-nav-link flex flex-col items-center text-gray-600 dark:text-gray-300">
+                                <i class="ph-duotone ph-gear text-3xl"></i><span class="text-xs font-medium">Configuración</span>
+                            </router-link>
+                            <router-link v-if="auth.hasRole(['mesero', 'administrador'])" to="/mesero" class="bottom-nav-link flex flex-col items-center text-gray-600 dark:text-gray-300">
                                 <i class="ph-duotone ph-user-list text-3xl"></i><span class="text-xs font-medium">Gestionar</span>
                             </router-link>
-                             <router-link v-if="auth.hasRole(['mesero', 'administrador'])" to="/crear-pedido" class="bottom-nav-link flex flex-col items-center text-gray-600">
+                             <router-link v-if="auth.hasRole(['mesero', 'administrador'])" to="/crear-pedido" class="bottom-nav-link flex flex-col items-center text-gray-600 dark:text-gray-300">
                                 <i class="ph-duotone ph-notepad text-3xl"></i><span class="text-xs font-medium">Crear Pedido</span>
                             </router-link>
-                            <router-link v-if="auth.hasRole(['mesero', 'administrador'])" to="/ingresar-pedido" class="bottom-nav-link relative flex flex-col items-center text-gray-600">
+                            <router-link v-if="auth.hasRole(['mesero', 'administrador'])" to="/ingresar-pedido" class="bottom-nav-link relative flex flex-col items-center text-gray-600 dark:text-gray-300">
                                 <span v-if="cart.totalItems > 0 && $route.path !== '/ingresar-pedido'" class="absolute top-0 right-1/2 transform translate-x-4 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
                                     {{ cart.totalItems }}
                                 </span>
                                 <i class="ph-duotone ph-arrow-circle-right text-3xl"></i><span class="text-xs font-medium">Ingresar</span>
                             </router-link>
-                            <router-link v-if="auth.hasRole(['cocinero', 'administrador'])" to="/cocina" class="bottom-nav-link flex flex-col items-center text-gray-600">
+                             <router-link v-if="auth.hasRole(['cocinero', 'mesero', 'administrador'])" to="/qrs" class="bottom-nav-link flex flex-col items-center text-gray-600 dark:text-gray-300">
+                                <i class="ph-duotone ph-qr-code text-3xl"></i><span class="text-xs font-medium">QRs</span>
+                            </router-link>
+                            <router-link v-if="auth.hasRole(['cocinero', 'administrador'])" to="/cocina" class="bottom-nav-link flex flex-col items-center text-gray-600 dark:text-gray-300">
                                 <i class="ph-duotone ph-fire text-3xl"></i><span class="text-xs font-medium">Cocina</span>
                             </router-link>
-                            <button @click="auth.logout()" class="bottom-nav-link flex flex-col items-center text-gray-600">
+                            <button @click="auth.logout()" class="bottom-nav-link flex flex-col items-center text-gray-600 dark:text-gray-300">
                                 <i class="ph-duotone ph-sign-out text-3xl"></i><span class="text-xs font-medium">Salir</span>
                             </button>
                         </template>
@@ -1675,7 +1868,8 @@
             setup() {
                 const auth = useAuthStore();
                 const cart = useCartStore();
-                return { auth, cart };
+                const theme = useThemeStore();
+                return { auth, cart, theme };
             }
         };
 
@@ -1694,6 +1888,8 @@
                     { path: 'ingresar-pedido', component: SubmitOrderView, meta: { title: 'Ingresar Pedido', requiresAuth: true, roles: ['mesero', 'administrador'] } },
                     { path: 'cocina', component: KitchenView, meta: { title: 'Vista de Cocina', requiresAuth: true, roles: ['cocinero', 'administrador'] } },
                     { path: 'pedidos', component: OrdersHistoryView, meta: { title: 'Historial', requiresAuth: true, roles: ['mesero', 'administrador'] } },
+                    { path: 'configuracion', component: SettingsView, meta: { title: 'Configuración', requiresAuth: true, roles: ['administrador'] } },
+                    { path: 'qrs', component: QRView, meta: { title: 'Generar QRs', requiresAuth: true, roles: ['mesero', 'cocinero', 'administrador'] } },
                 ]
             }
         ];
@@ -1728,6 +1924,11 @@
         const app = createApp({ template: '<router-view />' });
         const pinia = createPinia();
         app.use(pinia);
+        
+        // Inicializar el tema antes de montar la app
+        const themeStore = useThemeStore();
+        themeStore.initTheme();
+
         app.use(router);
         app.mount('#app');
     </script>
