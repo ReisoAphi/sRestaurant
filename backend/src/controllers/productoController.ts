@@ -80,7 +80,7 @@ export const deleteProducto = async (req: Request, res: Response) => {
         if (!producto) {
             return res.status(404).json({ message: 'Producto no encontrado' });
         }
-        producto.visible = true;
+        producto.visible = false;
         await producto.save();
         res.json({ message: 'Producto ocultado correctamente' });
     } catch (error) {

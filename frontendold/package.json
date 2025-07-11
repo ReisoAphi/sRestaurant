@@ -1,0 +1,31 @@
+{
+  "name": "frontend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build:css": "node ./node_modules/tailwindcss/lib/cli.js -i ./src/input.css -o ./dist/output.css",
+    "copy:html": "node -e \"require('fs').copyFileSync('index.html', 'dist/index.html')\"",
+    "build": "npm run build:css && npm run copy:html"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@tailwindcss/vite": "^4.1.11",
+    "axios": "^1.10.0",
+    "chart.js": "^4.5.0",
+    "pinia": "^3.0.3",
+    "qrcode": "^1.5.4",
+    "socket.io-client": "^4.8.1",
+    "vue": "^3.5.17",
+    "vue-demi": "^0.14.10",
+    "vue-router": "^4.5.1"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.11"
+  }
+}

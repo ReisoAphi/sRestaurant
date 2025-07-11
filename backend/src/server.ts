@@ -37,18 +37,25 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// **NUEVO**: Servir archivos estáticos desde la carpeta 'public'
-// Esto hará que las imágenes en 'public/uploads' sean accesibles desde la web
-app.use('/public', express.static(path.join(__dirname, '..', 'public')));
 
-
-// --- RUTAS DE LA API ---
+// --- RUTAS DE LA API (Deben ir primero) ---
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/categorias', categoriaRoutes);
 app.use('/api/productos', productoRoutes);
 app.use('/api/pedidos', pedidoRoutes);
+
+// --- RUTAS DE ARCHIVOS ESTÁTICOS ---
+const frontendDistPath = path.join(__dirname, '..', '..', 'frontend', 'dist');
+
+// Sirve todo desde la carpeta 'dist'
+app.use(express.static(frontendDistPath));
+
+// La ruta catch-all sirve el index.html
+app.get('*', (req, res) => {
+  res.sendFile(path.join(frontendDistPath, 'index.html'));
+});
 
 // --- LÓGICA DE SOCKET.IO ---
 io.on('connection', (socket) => {
