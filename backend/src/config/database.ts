@@ -4,8 +4,8 @@ import dotenv from 'dotenv';
 
 dotenv.config(); // Carga las variables de entorno desde .env
 
-const dbName = process.env.DB_DATABASE as string;
-const dbUser = process.env.DB_USER as string;
+const dbName = process.env.DB_DATABASE || 'sys';
+const dbUser = process.env.DB_USER || "root";
 const dbHost = process.env.DB_HOST;
 const dbPassword = process.env.DB_PASSWORD;
 

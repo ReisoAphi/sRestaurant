@@ -28,7 +28,7 @@ const io = new Server(httpServer, {
   }
 });
 
-const PORT = process.env.PORT || 80;
+const PORT = process.env.PORT || 3000;
 
 // --- MIDDLEWARE ---
 app.use(cors({
@@ -59,11 +59,6 @@ const servePortal = (req: Request, res: Response) => {
   console.log(`Portal Cautivo: Petición de ${req.originalUrl}. Sirviendo index.html.`);
   res.sendFile(path.join(frontendDistPath, 'index.html'));
 };
-
-app.get('/generate_204', servePortal);        // Android
-app.get('/hotspot-detect.html', servePortal); // Apple
-app.get('/ncsi.txt', servePortal);            // Microsoft
-
 // --- RUTAS DE ARCHIVOS ESTÁTICOS ---
 // Sirve todo desde la carpeta 'dist'
 app.use(express.static(frontendDistPath));
