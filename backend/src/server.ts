@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import path from 'path'; // Asegúrate de importar 'path'
+import path from 'path';
 
 import { testConnection } from './config/database';
 import { syncDatabase } from './models';
@@ -20,6 +20,7 @@ import userRoutes from './routes/userRoutes';
 dotenv.config();
 const app = express();
 const httpServer = createServer(app);
+
 const io = new Server(httpServer, {
   cors: {
     origin: "*",
@@ -27,7 +28,7 @@ const io = new Server(httpServer, {
   }
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 80;
 
 // --- MIDDLEWARE ---
 app.use(cors({
@@ -46,13 +47,28 @@ app.use('/api/categorias', categoriaRoutes);
 app.use('/api/productos', productoRoutes);
 app.use('/api/pedidos', pedidoRoutes);
 
-// --- RUTAS DE ARCHIVOS ESTÁTICOS ---
+// --- CÓDIGO DEL PORTAL CAUTIVO AÑADIDO ---
 const frontendDistPath = path.join(__dirname, '..', '..', 'frontend', 'dist');
 
+// Estas rutas deben ir ANTES de servir los archivos estáticos.
+// Responden a las peticiones de prueba de conectividad de los SO móviles
+// para forzar la apertura de la ventana de "Sign In".
+import { Request, Response } from 'express';
+
+const servePortal = (req: Request, res: Response) => {
+  console.log(`Portal Cautivo: Petición de ${req.originalUrl}. Sirviendo index.html.`);
+  res.sendFile(path.join(frontendDistPath, 'index.html'));
+};
+
+app.get('/generate_204', servePortal);        // Android
+app.get('/hotspot-detect.html', servePortal); // Apple
+app.get('/ncsi.txt', servePortal);            // Microsoft
+
+// --- RUTAS DE ARCHIVOS ESTÁTICOS ---
 // Sirve todo desde la carpeta 'dist'
 app.use(express.static(frontendDistPath));
 
-// La ruta catch-all sirve el index.html
+// La ruta catch-all sirve el index.html para cualquier otra petición y para el router de tu frontend.
 app.get('*', (req, res) => {
   res.sendFile(path.join(frontendDistPath, 'index.html'));
 });
