@@ -7,7 +7,7 @@ import apiClient from '../services/api';
 export const useCartStore = defineStore('cart', () => {
     const router = useRouter();
     const items = ref([]);
-    const mesaNombre = ref('Cliente');
+    const mesaNombre = ref('');
     const consumerOrderId = ref(localStorage.getItem('consumerOrderId') || null);
 
     const totalItems = computed(() => items.value.reduce((acc, item) => acc + item.cantidad, 0));
@@ -90,9 +90,9 @@ export const useCartStore = defineStore('cart', () => {
         return response.data;
     }
 
-    function resetCart() {
+   function resetCart() {
         items.value = [];
-        mesaNombre.value = 'Cliente';
+        mesaNombre.value = '';
     }
 
     function clearConsumerOrder() {
