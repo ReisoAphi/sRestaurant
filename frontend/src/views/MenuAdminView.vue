@@ -89,15 +89,63 @@
     </div>
 
     <div v-if="ingredientModal.isOpen" @click.self="closeIngredientModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-8 w-full max-w-md">
+        <h3 class="text-2xl font-bold mb-6 dark:text-gray-100">{{ ingredientModal.isEdit ? 'Editar' : 'Nuevo' }} Ingrediente</h3>
+        <form @submit.prevent="handleIngredientSubmit" class="space-y-4">
+          <div>
+            <label for="ing-nombre" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre</label>
+            <input v-model="ingredientModal.current.nombre" id="ing-nombre" type="text" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md shadow-sm" required>
+          </div>
+          <div>
+            <label for="ing-costo" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Costo Extra</label>
+            <input v-model="ingredientModal.current.costo_extra" id="ing-costo" type="number" step="0.01" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md shadow-sm" required>
+          </div>
+          <div class="flex justify-end gap-4 pt-4">
+            <button type="button" @click="closeIngredientModal" class="px-4 py-2 bg-gray-200 dark:bg-gray-600 dark:text-gray-200 rounded-lg">Cancelar</button>
+            <button type="submit" class="px-4 py-2 bg-cyan-500 text-white rounded-lg">Guardar</button>
+          </div>
+        </form>
       </div>
+    </div>
 
     <div v-if="categoryModal.isOpen" @click.self="closeCategoryModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-       </div>
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-8 w-full max-w-md">
+        <h3 class="text-2xl font-bold mb-6 dark:text-gray-100">{{ categoryModal.isEdit ? 'Editar' : 'Nueva' }} Categoría</h3>
+        <form @submit.prevent="handleCategorySubmit">
+          <div class="mb-4">
+            <label for="cat-nombre" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre</label>
+            <input v-model="categoryModal.current.nombre" id="cat-nombre" type="text" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md shadow-sm" required>
+          </div>
+          <div class="flex justify-end gap-4 mt-8">
+            <button type="button" @click="closeCategoryModal" class="px-4 py-2 bg-gray-200 dark:bg-gray-600 dark:text-gray-200 rounded-lg">Cancelar</button>
+            <button type="submit" class="px-4 py-2 bg-emerald-500 text-white rounded-lg">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <div v-if="productModal.isOpen" @click.self="closeProductModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-8 w-full max-w-lg max-h-[90vh] flex flex-col">
         <h3 class="text-2xl font-bold mb-6 dark:text-gray-100 shrink-0">{{ productModal.isEdit ? 'Editar' : 'Nuevo' }} Producto</h3>
         <form @submit.prevent="handleProductSubmit" class="space-y-4 overflow-y-auto flex-1 pr-2">
+          <input v-model="productModal.current.nombre" type="text" placeholder="Nombre del producto" class="w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md shadow-sm" required>
+          <textarea v-model="productModal.current.descripcion" placeholder="Descripción" class="w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md shadow-sm" rows="3"></textarea>
+          <input v-model="productModal.current.precio" type="number" step="0.01" placeholder="Precio" class="w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md shadow-sm" required>
+          <select v-model="productModal.current.categoriaId" class="w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md shadow-sm" required>
+            <option :value="null" disabled>Selecciona una categoría</option>
+            <option v-for="cat in categories.filter(c => c.visible)" :key="cat.id" :value="cat.id">{{ cat.nombre }}</option>
+          </select>
+          
+          <div class="border-t dark:border-gray-600 pt-4">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Ingredientes Base del Producto</label>
+              <div class="max-h-48 overflow-y-auto space-y-2 p-2 bg-gray-50 dark:bg-gray-900/50 rounded-md border dark:border-gray-600">
+                  <label v-for="ing in ingredients" :key="ing.id" class="flex items-center p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md">
+                      <input type="checkbox" :value="ing.id" v-model="productModal.current.ingredientes" class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
+                      <span class="ml-2 text-sm dark:text-gray-300">{{ ing.nombre }}</span>
+                  </label>
+              </div>
+          </div>
+          
           <div>
             <label for="prod-imagen" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Imagen del Producto</label>
             <input @change="handleImageUpload" id="prod-imagen" type="file" accept="image/*" class="mt-1 block w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 dark:file:bg-emerald-900/50 file:text-emerald-700 dark:file:text-emerald-300 hover:file:bg-emerald-100 dark:hover:file:bg-emerald-800/50">
@@ -105,6 +153,7 @@
               <img :src="imagePreviewUrl || getImageUrl(productModal.current.imagen_url)" @error="onImageError" class="w-32 h-32 object-cover rounded-md bg-gray-200">
             </div>
           </div>
+
           <div class="flex justify-end gap-4 pt-4 shrink-0">
             <button type="button" @click="closeProductModal" class="px-4 py-2 bg-gray-200 dark:bg-gray-600 dark:text-gray-200 rounded-lg">Cancelar</button>
             <button type="submit" class="px-4 py-2 bg-emerald-500 text-white rounded-lg">Guardar</button>
@@ -130,6 +179,12 @@ const productModal = ref({ isOpen: false, isEdit: false, current: { ingredientes
 const ingredientModal = ref({ isOpen: false, isEdit: false, current: {} });
 const imagePreviewUrl = ref(null);
 const selectedFile = ref(null);
+
+const getImageUrl = (imagePath) => {
+  if (!imagePath) return '';
+  const baseUrl = apiClient.defaults.baseURL.replace('/api', '');
+  return `${baseUrl}${imagePath}`;
+};
 
 const onImageError = (event) => {
     event.target.src = 'https://placehold.co/40x40/e2e8f0/64748b?text=??';
@@ -172,8 +227,7 @@ const openIngredientModal = (ing = null) => {
     ingredientModal.value = { isOpen: true, isEdit: false, current: { nombre: '', costo_extra: 0 } };
   }
 };
-const closeIngredientModal = () => ingredientModal.value.isOpen = false;
-
+const closeIngredientModal = () => { ingredientModal.value.isOpen = false; };
 const handleIngredientSubmit = async () => {
   const { isEdit, current } = ingredientModal.value;
   try {
@@ -196,7 +250,7 @@ const deleteIngredient = async (ing) => {
     } catch(error) {
         alert(error.response?.data?.message || 'Error al eliminar el ingrediente.');
     }
-}
+};
 
 // --- Lógica de Categorías ---
 const openCategoryModal = (cat = null) => {
@@ -206,7 +260,7 @@ const openCategoryModal = (cat = null) => {
     categoryModal.value = { isOpen: true, isEdit: false, current: { nombre: '' } };
   }
 };
-const closeCategoryModal = () => categoryModal.value.isOpen = false;
+const closeCategoryModal = () => { categoryModal.value.isOpen = false; };
 const handleCategorySubmit = async () => {
   const { isEdit, current } = categoryModal.value;
   try {
@@ -236,8 +290,7 @@ const openProductModal = (prod = null) => {
     productModal.value = { isOpen: true, isEdit: false, current: { nombre: '', descripcion: '', precio: '', imagen_url: '', categoriaId: null, ingredientes: [] } };
   }
 };
-const closeProductModal = () => productModal.value.isOpen = false;
-
+const closeProductModal = () => { productModal.value.isOpen = false; };
 const handleProductSubmit = async () => {
   const { isEdit, current } = productModal.value;
   
@@ -252,10 +305,8 @@ const handleProductSubmit = async () => {
 
   if (selectedFile.value) {
     formData.append('imagen', selectedFile.value);
-  } else if (!isEdit && !current.imagen_url) {
-      formData.delete('imagen_url');
   }
-
+  
   try {
     const config = { headers: { 'Content-Type': 'multipart/form-data' } };
     if (isEdit) {

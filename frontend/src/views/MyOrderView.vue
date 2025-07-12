@@ -1,6 +1,20 @@
 <template>
   <div class="max-w-lg mx-auto">
-    <CartComponent v-if="cart.items.length > 0 && !cart.consumerOrderId" />
+    <div v-if="cart.items.length > 0 && !cart.consumerOrderId">
+       <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+          <div class="mb-6">
+            <label for="mesaNombre" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Tu Nombre o Número de Mesa</label>
+            <input 
+                type="text" 
+                id="mesaNombre" 
+                v-model="cart.mesaNombre"
+                class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md shadow-sm"
+                placeholder="Ej: Laura G, Mesa 5"
+            >
+          </div>
+          <CartComponent :is-waiter="false" />
+       </div>
+    </div>
     
     <div v-else>
       <div v-if="loading" class="text-center py-20">
@@ -34,10 +48,20 @@
             <span>{{ statusInfo.text }}</span>
           </div>
         </div>
-        <ul class="space-y-2 mb-6">
-          <li v-for="detalle in pedido.detalles" :key="detalle.id" class="flex justify-between items-center text-gray-700 dark:text-gray-300">
-            <span>{{ detalle.cantidad }}x {{ detalle.producto.nombre }}</span>
-            <span class="font-medium">{{ formatCurrency(detalle.cantidad * detalle.precio_unitario) }}</span>
+        <ul class="space-y-3 mb-6">
+          <li v-for="detalle in pedido.detalles" :key="detalle.id" class="flex flex-col items-start">
+            <div class="flex justify-between w-full">
+                <span class="text-gray-700 dark:text-gray-300">{{ detalle.cantidad }}x {{ detalle.producto.nombre }}</span>
+                <span class="font-medium">{{ formatCurrency(detalle.cantidad * detalle.precio_unitario) }}</span>
+            </div>
+            <div v-if="detalle.personalizacion" class="pl-4 mt-1 text-xs w-full">
+              <p v-for="extra in (detalle.personalizacion.agregados || [])" :key="extra.nombre" class="text-blue-600 dark:text-blue-400 font-semibold">
+                + {{ extra.nombre }}
+              </p>
+              <p v-for="removido in (detalle.personalizacion.removidos || [])" :key="removido" class="text-red-500 dark:text-red-400 font-semibold">
+                - Sin {{ removido }}
+              </p>
+            </div>
           </li>
         </ul>
         <div class="border-t dark:border-gray-700 pt-4 flex justify-between text-xl font-bold dark:text-gray-100">
@@ -74,6 +98,22 @@ const backendUrl = `http://${backendHostname}:3000`;
 
 const formatCurrency = (value) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(value || 0);
 
+const parsePersonalizacion = (pedidoObj) => {
+    if (pedidoObj && Array.isArray(pedidoObj.detalles)) {
+      pedidoObj.detalles.forEach(detalle => {
+        if (detalle && typeof detalle.personalizacion === 'string') {
+          try {
+            detalle.personalizacion = JSON.parse(detalle.personalizacion);
+          } catch (e) {
+            console.error("Error al parsear la personalización:", e);
+            detalle.personalizacion = null;
+          }
+        }
+      });
+    }
+    return pedidoObj;
+};
+
 const fetchPedido = async () => {
     if (!cart.consumerOrderId) {
         loading.value = false;
@@ -83,7 +123,7 @@ const fetchPedido = async () => {
     error.value = null;
     try {
         const response = await apiClient.get(`/pedidos/${cart.consumerOrderId}`);
-        pedido.value = response.data;
+        pedido.value = parsePersonalizacion(response.data);
     } catch (err) {
         console.error("Error fetching order:", err);
         if (err.response && err.response.status === 404) {
@@ -127,16 +167,17 @@ onMounted(() => {
     socket.on('connect', () => console.log('Socket conectado en Mi Pedido'));
     socket.on('pedido_actualizado', (pedidoActualizado) => {
         if (String(pedidoActualizado.id) === String(cart.consumerOrderId)) {
-            pedido.value = pedidoActualizado;
+            pedido.value = parsePersonalizacion(pedidoActualizado);
         }
     });
 });
 
-watch(() => cart.consumerOrderId, (newId) => { 
-    if (newId) {
+// ===== CORRECCIÓN CLAVE: Reaccionar al cambio del ID del pedido =====
+watch(() => cart.consumerOrderId, (newId, oldId) => {
+    // Si el ID cambia (es decir, se acaba de crear un nuevo pedido),
+    // volvemos a llamar a fetchPedido para cargar su estado.
+    if (newId && newId !== oldId) {
         fetchPedido();
-    } else {
-        pedido.value = null;
     }
 });
 

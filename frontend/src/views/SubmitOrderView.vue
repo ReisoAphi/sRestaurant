@@ -2,6 +2,16 @@
   <div class="max-w-2xl mx-auto">
     <div v-if="!recentOrder">
       <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+        <div class="mb-6">
+          <label for="mesaNombre" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre o Número de Mesa</label>
+          <input 
+              type="text" 
+              id="mesaNombre" 
+              v-model="cart.mesaNombre"
+              class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md shadow-sm"
+              placeholder="Ej: Mesa 5, Terraza, Juan Pérez"
+          >
+        </div>
         <CartComponent :is-waiter="true" @order-submitted="onOrderSubmitted" :all-ingredients="allIngredients" />
       </div>
     </div>
@@ -27,9 +37,8 @@ import OrderCard from '../components/OrderCard.vue';
 
 const cart = useCartStore();
 const recentOrder = ref(null);
-const allIngredients = ref([]); // Estado para guardar los ingredientes
+const allIngredients = ref([]);
 
-// Función para cargar los ingredientes cuando el componente se monta
 const fetchIngredients = async () => {
     try {
         const response = await apiClient.get('/ingredientes');
@@ -54,6 +63,5 @@ const createNewOrder = () => {
     cart.resetCart();
 };
 
-// Cargar los ingredientes al iniciar la vista
 onMounted(fetchIngredients);
 </script>

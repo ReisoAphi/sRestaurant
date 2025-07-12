@@ -15,7 +15,6 @@ import SubmitOrderView from '../views/SubmitOrderView.vue';
 import KitchenView from '../views/KitchenView.vue';
 import OrdersHistoryView from '../views/OrdersHistoryView.vue';
 import SettingsView from '../views/SettingsView.vue';
-import QRView from '../views/QRView.vue';
 
 const routes = [
   // --- Rutas Públicas ---
@@ -79,13 +78,6 @@ const routes = [
     path: '/cocina',
     component: KitchenView,
     meta: { title: 'Vista de Cocina', requiresAuth: true, roles: ['cocinero', 'administrador'] }
-  },
-
-  // --- Rutas para todos los roles logueados ---
-  {
-    path: '/qrs',
-    component: QRView,
-    meta: { title: 'Generar QRs', requiresAuth: true, roles: ['mesero', 'cocinero', 'administrador'] }
   },
 ];
 

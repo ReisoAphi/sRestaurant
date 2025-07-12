@@ -53,7 +53,6 @@
                 <span class="text-xs font-medium">Ingresar</span>
             </router-link>
             <router-link v-if="auth.hasRole(['cocinero', 'administrador'])" to="/cocina" class="bottom-nav-link"><ph-fire :size="32" weight="duotone" /><span class="text-xs font-medium">Cocina</span></router-link>
-            <router-link v-if="auth.hasRole(['cocinero', 'mesero', 'administrador'])" to="/qrs" class="bottom-nav-link"><ph-qr-code :size="32" weight="duotone" /><span class="text-xs font-medium">QRs</span></router-link>
             <button @click="handleLogout" class="bottom-nav-link">
                 <ph-sign-out :size="32" weight="duotone" />
                 <span class="text-xs font-medium">Salir</span>
