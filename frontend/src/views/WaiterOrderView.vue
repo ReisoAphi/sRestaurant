@@ -15,9 +15,17 @@
         <p class="mt-2 text-gray-600 dark:text-gray-400">No se encontraron productos.</p>
       </div>
       <transition-group v-else name="slide-up" tag="div" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-        <ProductCard v-for="product in filteredProducts" :key="product.id" :product="product" @add-to-cart="cart.addItem"/>
+        <ProductCard v-for="product in filteredProducts" :key="product.id" :product="product" @customize="openCustomizationModal"/>
       </transition-group>
     </div>
+    
+    <CustomizeProductModal 
+      :is-visible="isModalVisible"
+      :product="selectedProduct"
+      :todos-los-ingredientes="allIngredients"
+      @close="closeCustomizationModal"
+      @add-to-cart="handleAddToCart"
+    />
   </div>
 </template>
 
@@ -26,21 +34,31 @@ import { ref, computed, onMounted } from 'vue';
 import { useCartStore } from '../stores/cart';
 import apiClient from '../services/api';
 import ProductCard from '../components/ProductCard.vue';
+import CustomizeProductModal from '../components/CustomizeProductModal.vue';
 
 const cart = useCartStore();
 const products = ref([]);
 const categories = ref([]);
+const allIngredients = ref([]);
 const loading = ref(true);
 const searchTerm = ref('');
 const selectedCategory = ref(null);
 
-const fetchProductsAndCategories = async () => {
+// Estado para el modal
+const isModalVisible = ref(false);
+const selectedProduct = ref(null);
+
+const fetchMenuData = async () => {
     try {
         loading.value = true;
-        const productsRes = await apiClient.get('/productos');
+        const [productsRes, categoriesRes, ingredientsRes] = await Promise.all([
+            apiClient.get('/productos'),
+            apiClient.get('/categorias'),
+            apiClient.get('/ingredientes')
+        ]);
         products.value = productsRes.data;
-        const categoriesRes = await apiClient.get('/categorias');
-        categories.value = categoriesRes.data;
+        categories.value = categoriesRes.data.filter(c => c.visible);
+        allIngredients.value = ingredientsRes.data;
     } catch (error) {
         console.error("Error al cargar datos:", error);
         alert("No se pudo conectar con el servidor.");
@@ -60,5 +78,19 @@ const filteredProducts = computed(() => {
     return filtered;
 });
 
-onMounted(fetchProductsAndCategories);
+const openCustomizationModal = (product) => {
+  selectedProduct.value = product;
+  isModalVisible.value = true;
+};
+
+const closeCustomizationModal = () => {
+  isModalVisible.value = false;
+  selectedProduct.value = null;
+};
+
+const handleAddToCart = ({ producto, personalizacion }) => {
+  cart.addItem(producto, personalizacion);
+};
+
+onMounted(fetchMenuData);
 </script>

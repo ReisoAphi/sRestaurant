@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-5 flex flex-col" :class="getCardBorder(localOrder.estado)">
+  <div v-if="localOrder" class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-5 flex flex-col" :class="getCardBorder(localOrder.estado)">
     <div class="flex justify-between items-start mb-3">
         <h3 class="text-xl font-bold text-gray-800 dark:text-gray-100">{{ localOrder.mesa_nombre }} - #{{ localOrder.id }}</h3>
         <span class="text-lg font-bold flex items-center gap-1" :class="getStatusColor(localOrder.estado)">
@@ -8,10 +8,22 @@
         </span>
     </div>
     <p class="mb-3 font-semibold capitalize" :class="getStatusColor(localOrder.estado)">Estado: {{ getStatusText(localOrder.estado) }}</p>
-    <ul class="flex-1 border-t border-b border-gray-200 dark:border-gray-700 py-3 my-3 space-y-2">
-        <li v-for="detalle in localOrder.detalles" :key="detalle.id" class="flex justify-between items-center">
-          <span class="text-gray-700 dark:text-gray-300">{{ detalle.producto.nombre }}</span>
-          <span class="font-bold text-emerald-600 dark:text-emerald-400">x {{ detalle.cantidad }}</span>
+    
+    <ul class="flex-1 border-t border-b border-gray-200 dark:border-gray-700 py-3 my-3 space-y-3">
+        <li v-for="detalle in localOrder.detalles" :key="detalle.id" class="flex flex-col items-start">
+          <div class="flex justify-between w-full">
+            <span class="text-gray-700 dark:text-gray-300 font-medium">
+              {{ detalle.cantidad }}x {{ detalle.producto ? detalle.producto.nombre : 'Producto no disponible' }}
+            </span>
+          </div>
+          <div v-if="detalle.personalizacion" class="pl-4 mt-1 text-xs w-full">
+            <p v-for="extra in (detalle.personalizacion.agregados || [])" :key="extra.nombre" class="text-blue-600 dark:text-blue-400 font-semibold">
+              + {{ extra.nombre }}
+            </p>
+            <p v-for="removido in (detalle.personalizacion.removidos || [])" :key="removido" class="text-red-500 dark:text-red-400 font-semibold">
+              - Sin {{ removido }}
+            </p>
+          </div>
         </li>
     </ul>
     
@@ -56,19 +68,27 @@
       :is-visible="addItemsModal.isOpen" 
       :pedido-id="addItemsModal.pedidoId"
       @close="closeAddItemsModal"
-      @items-added="fetchOrder"
+      @items-added="handleItemsAdded"
   />
 </template>
 
 <script setup>
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import apiClient from '../services/api';
-import AddItemsModal from './AddItemsModal.vue'; // Este será nuestro siguiente componente a crear
+import AddItemsModal from './AddItemsModal.vue';
 
-const props = defineProps(['order']);
+const props = defineProps({
+  order: { type: Object, required: true }
+});
+
 const emit = defineEmits(['order-updated']);
 
 const localOrder = ref(JSON.parse(JSON.stringify(props.order)));
+
+watch(() => props.order, (newOrder) => {
+    localOrder.value = JSON.parse(JSON.stringify(newOrder));
+}, { deep: true });
+
 const currentTime = ref(new Date());
 const confirmation = ref({ isOpen: false, message: '', icon: '', confirmButtonClass: '', onConfirm: () => {} });
 const addItemsModal = ref({ isOpen: false, pedidoId: null });
@@ -77,28 +97,32 @@ let timerIntervalId = null;
 const formatCurrency = (value) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(value || 0);
 
 const fetchOrder = async () => {
+    if (!localOrder.value?.id) return;
     try {
         const response = await apiClient.get(`/pedidos/${localOrder.value.id}`);
         localOrder.value = response.data;
-        emit('order-updated', response.data);
+        emit('order-updated');
     } catch (error) {
-        console.error("Error fetching order:", error);
+        console.error("Error al refrescar el pedido:", error);
     }
+};
+
+const handleItemsAdded = () => {
+    addItemsModal.value.isOpen = false;
+    fetchOrder();
 };
 
 const updateOrderStatus = async (pedidoId, nuevoEstado) => {
     try { 
-        const response = await apiClient.patch(`/pedidos/${pedidoId}/estado`, { estado: nuevoEstado });
-        localOrder.value = response.data;
-        emit('order-updated', response.data);
+        await apiClient.patch(`/pedidos/${pedidoId}/estado`, { estado: nuevoEstado });
+        fetchOrder();
     } catch (error) { console.error("Error al actualizar estado:", error); }
 };
 
 const markAsPaid = async (pedidoId) => {
     try {
-        const response = await apiClient.patch(`/pedidos/${pedidoId}/pagar`);
-        localOrder.value = response.data;
-        emit('order-updated', response.data);
+        await apiClient.patch(`/pedidos/${pedidoId}/pagar`);
+        fetchOrder();
     } catch(error) { console.error("Error al marcar como pagado:", error); }
 };
 
@@ -113,35 +137,23 @@ const openConfirmationModal = (pedido, action) => {
 };
 
 const closeConfirmationModal = () => { confirmation.value.isOpen = false; };
-const executeConfirmation = () => { confirmation.value.onConfirm(); closeConfirmationModal(); };
-
+const executeConfirmation = () => { if (confirmation.value.onConfirm) { confirmation.value.onConfirm(); } closeConfirmationModal(); };
 const openAddItemsModal = (pedido) => { addItemsModal.value = { isOpen: true, pedidoId: pedido.id }; };
 const closeAddItemsModal = () => { addItemsModal.value = { isOpen: false, pedidoId: null }; };
 
 const calculateElapsedTime = (startTime) => {
     const start = new Date(startTime);
     const elapsed = Math.floor((currentTime.value.getTime() - start.getTime()) / 1000);
-    if (elapsed < 0) return '00:00';
+    if (isNaN(elapsed) || elapsed < 0) return '00:00';
     const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
     const seconds = (elapsed % 60).toString().padStart(2, '0');
     return `${minutes}:${seconds}`;
 };
 
-const getStatusText = (estado) => (estado ? estado.replace('_', ' ') : '');
+const getStatusText = (estado) => (estado ? estado.replace(/_/g, ' ') : '');
 const getStatusColor = (estado) => ({ 'en validacion': 'text-gray-500 dark:text-gray-400', 'en preparacion': 'text-yellow-600 dark:text-yellow-400', 'listo para entregar': 'text-blue-600 dark:text-blue-400', 'entregado': 'text-purple-600 dark:text-purple-400', 'cancelado': 'text-red-500' }[estado] || 'text-gray-500 dark:text-gray-400');
 const getCardBorder = (estado) => ({ 'en validacion': 'border-l-4 border-gray-400', 'en preparacion': 'border-l-4 border-yellow-500', 'listo para entregar': 'border-l-4 border-blue-500', 'entregado': 'border-l-4 border-purple-500' }[estado] || '');
 
-watch(() => props.order, (newOrder) => {
-    localOrder.value = JSON.parse(JSON.stringify(newOrder));
-}, { deep: true });
-
-onMounted(() => {
-    timerIntervalId = setInterval(() => {
-        currentTime.value = new Date();
-    }, 1000);
-});
-
-onBeforeUnmount(() => {
-    if (timerIntervalId) clearInterval(timerIntervalId);
-});
+onMounted(() => { timerIntervalId = setInterval(() => { currentTime.value = new Date(); }, 1000); });
+onBeforeUnmount(() => { if (timerIntervalId) clearInterval(timerIntervalId); });
 </script>

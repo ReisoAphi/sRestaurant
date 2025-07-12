@@ -10,40 +10,60 @@ export const useCartStore = defineStore('cart', () => {
     const mesaNombre = ref('Cliente');
     const consumerOrderId = ref(localStorage.getItem('consumerOrderId') || null);
 
+    const totalItems = computed(() => items.value.reduce((acc, item) => acc + item.cantidad, 0));
+    // El subtotal, impuestos y total ahora se calculan en base al precio final de cada item, que ya incluye extras.
     const subtotal = computed(() => items.value.reduce((acc, item) => acc + (parseFloat(item.precio) * item.cantidad), 0));
     const impuestos = computed(() => subtotal.value * 0.16);
     const total = computed(() => subtotal.value + impuestos.value);
-    const totalItems = computed(() => items.value.reduce((acc, item) => acc + item.cantidad, 0));
 
-    function addItem(producto) {
-        const existingItem = items.value.find(item => item.id === producto.id);
+    // Añade un producto con su personalización
+    function addItem(producto, personalizacion) {
+        // La clave única ahora depende de la personalización para agrupar items idénticos
+        const personalizacionString = JSON.stringify({
+            removidos: personalizacion.removidos.sort(),
+            agregados: personalizacion.agregados.sort()
+        });
+        const itemKey = `${producto.id}-${personalizacionString}`;
+
+        const existingItem = items.value.find(item => item.key === itemKey);
+
         if (existingItem) {
             existingItem.cantidad++;
         } else {
-            items.value.push({ ...producto, cantidad: 1 });
+            items.value.push({ 
+                ...producto, 
+                cantidad: 1, 
+                personalizacion,
+                key: itemKey 
+            });
         }
     }
 
-    function removeItem(productoId) {
-        items.value = items.value.filter(item => item.id !== productoId);
+    function removeItem(itemKey) {
+        items.value = items.value.filter(item => item.key !== itemKey);
     }
 
-    function updateQuantity(productoId, cantidad) {
-        const item = items.value.find(i => i.id === productoId);
+    function updateQuantity(itemKey, cantidad) {
+        const item = items.value.find(i => i.key === itemKey);
         if (item) {
             if (cantidad > 0) {
                 item.cantidad = parseInt(cantidad, 10);
             } else {
-                removeItem(productoId);
+                removeItem(itemKey);
             }
         }
     }
 
     async function submitPedido() {
         if (items.value.length === 0) return false;
+        
         const pedidoBody = {
             mesa_nombre: mesaNombre.value,
-            detalles: items.value.map(item => ({ productoId: item.id, cantidad: item.cantidad }))
+            detalles: items.value.map(item => ({ 
+                productoId: item.id, 
+                cantidad: item.cantidad,
+                personalizacion: item.personalizacion
+            }))
         };
         const response = await apiClient.post('/pedidos', pedidoBody);
         const newOrderId = response.data.id;
@@ -58,16 +78,21 @@ export const useCartStore = defineStore('cart', () => {
         if (items.value.length === 0) return false;
         const pedidoBody = {
             mesa_nombre: mesaNombre.value,
-            detalles: items.value.map(item => ({ productoId: item.id, cantidad: item.cantidad })),
+            detalles: items.value.map(item => ({ 
+                productoId: item.id, 
+                cantidad: item.cantidad,
+                personalizacion: item.personalizacion
+            })),
             estado: 'en validacion'
         };
         const response = await apiClient.post('/pedidos', pedidoBody);
         resetCart();
-        return response.data; // Devolver el pedido completo
+        return response.data;
     }
 
     function resetCart() {
         items.value = [];
+        mesaNombre.value = 'Cliente';
     }
 
     function clearConsumerOrder() {
@@ -76,19 +101,8 @@ export const useCartStore = defineStore('cart', () => {
     }
 
     return {
-        items,
-        mesaNombre,
-        totalItems,
-        subtotal,
-        impuestos,
-        total,
-        consumerOrderId,
-        addItem,
-        removeItem,
-        updateQuantity,
-        submitPedido,
-        submitWaiterPedido,
-        resetCart,
-        clearConsumerOrder
+        items, mesaNombre, totalItems, subtotal, impuestos, total,
+        consumerOrderId, addItem, removeItem, updateQuantity,
+        submitPedido, submitWaiterPedido, resetCart, clearConsumerOrder
     };
 });

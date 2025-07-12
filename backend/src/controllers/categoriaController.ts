@@ -34,9 +34,10 @@ export const createCategoria = async (req: Request, res: Response) => {
     if (!nombre) {
       return res.status(400).json({ message: 'El nombre es requerido' });
     }
+    // CORRECCIÓN: Las nuevas categorías ahora son visibles por defecto.
     const nuevaCategoria = await Categoria.create({
       nombre,
-      visible: false
+      visible: true 
     });
     res.status(201).json(nuevaCategoria);
   } catch (error) {

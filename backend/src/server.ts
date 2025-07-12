@@ -15,7 +15,7 @@ import productoRoutes from './routes/productoRoutes';
 import pedidoRoutes from './routes/pedidoRoutes';
 import dashboardRoutes from './routes/dashboardRoutes';
 import userRoutes from './routes/userRoutes';
-
+import ingredienteRoutes from './routes/ingredienteRoutes'; 
 // --- INICIALIZACIÓN ---
 dotenv.config();
 const app = express();
@@ -46,6 +46,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/categorias', categoriaRoutes);
 app.use('/api/productos', productoRoutes);
 app.use('/api/pedidos', pedidoRoutes);
+app.use('/api/ingredientes', ingredienteRoutes);
 
 // --- CÓDIGO DEL PORTAL CAUTIVO AÑADIDO ---
 const frontendDistPath = path.join(__dirname, '..', '..', 'frontend', 'dist');

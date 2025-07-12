@@ -1,5 +1,5 @@
 <template>
-  <div @click="$emit('addToCart', product)" class="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden cursor-pointer hover:shadow-xl transition-shadow duration-300 transform hover:-translate-y-1 flex flex-col">
+  <div @click="$emit('customize', product)" class="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden cursor-pointer hover:shadow-xl transition-shadow duration-300 transform hover:-translate-y-1 flex flex-col">
     <div class="h-40 bg-gray-200 dark:bg-gray-700 flex items-center justify-center relative overflow-hidden">
         <img v-if="product.imagen_url" :src="product.imagen_url" @error="onImageError" class="w-full h-full object-cover" :alt="'Imagen de ' + product.nombre">
         <i v-else class="ph-duotone ph-hamburger text-6xl text-gray-400 dark:text-gray-500"></i>
@@ -15,14 +15,12 @@
 </template>
 
 <script setup>
-// Define las propiedades (props) y eventos (emits) que el componente puede recibir/enviar
 defineProps(['product']);
-defineEmits(['addToCart']);
+// Cambiamos el emit de 'addToCart' a 'customize'
+defineEmits(['customize']);
 
-// Función para formatear la moneda
 const formatCurrency = (value) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(value || 0);
 
-// Función para manejar errores al cargar imágenes
 const onImageError = (event) => {
     const placeholder = document.createElement('div');
     placeholder.className = 'w-full h-full flex items-center justify-center bg-gray-100 dark:bg-gray-700';
